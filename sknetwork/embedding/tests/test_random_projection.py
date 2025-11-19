@@ -3,7 +3,7 @@
 """Tests for random projection"""
 import unittest
 
-from sknetwork.data.test_graphs import test_graph, test_bigraph, test_digraph, test_graph_disconnect
+from sknetwork.data.test_graphs import test_graph, test_bigraph, test_digraph, test_disconnected_graph
 from sknetwork.embedding import RandomProjection
 
 
@@ -14,10 +14,12 @@ class TestEmbeddings(unittest.TestCase):
             adjacency = test_graph()
             embedding = algo.fit_transform(adjacency)
             self.assertEqual(embedding.shape[1], 2)
+            embedding = algo.fit_transform(adjacency, force_bipartite=True)
+            self.assertEqual(embedding.shape[1], 2)
             adjacency = test_digraph()
             embedding = algo.fit_transform(adjacency)
             self.assertEqual(embedding.shape[1], 2)
-            adjacency = test_graph_disconnect()
+            adjacency = test_disconnected_graph()
             embedding = algo.fit_transform(adjacency)
             self.assertEqual(embedding.shape[1], 2)
             biadjacency = test_bigraph()

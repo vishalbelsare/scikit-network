@@ -1,3 +1,5 @@
+.. _ClusteringTag:
+
 Clustering
 **********
 
@@ -5,6 +7,6 @@ Clustering
 .. toctree::
 
    louvain
+   leiden
+   kcenters
    propagation
-   kmeans
-

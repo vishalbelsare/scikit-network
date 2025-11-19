@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Created in May 2018
-@author: Nathan de Lara <ndelara@enst.fr>
+@author: Nathan de Lara <nathan.delara@polytechnique.org>
 @author: Thomas Bonald <bonald@enst.fr>
 """
 from typing import Union
@@ -11,12 +11,12 @@ import numpy as np
 from scipy import sparse
 
 from sknetwork.embedding.base import BaseEmbedding
-from sknetwork.linalg import SVDSolver, LanczosSVD, safe_sparse_dot, diag_pinv, normalize, Regularizer, SparseLR
+from sknetwork.linalg import SVDSolver, LanczosSVD, safe_sparse_dot, diagonal_pseudo_inverse, normalize, Regularizer, SparseLR
 from sknetwork.utils.check import check_format, check_adjacency_vector, check_nonnegative, check_n_components
 
 
 class GSVD(BaseEmbedding):
-    """Graph embedding by Generalized Singular Value Decomposition of the adjacency or biadjacency matrix :math:`A`.
+    r"""Graph embedding by Generalized Singular Value Decomposition of the adjacency or biadjacency matrix :math:`A`.
     This is equivalent to the Singular Value Decomposition of the matrix :math:`D_1^{- \\alpha_1}AD_2^{- \\alpha_2}`
     where :math:`D_1, D_2` are the diagonal matrices of row weights and columns weights, respectively, and
     :math:`\\alpha_1, \\alpha_2` are parameters.
@@ -96,6 +96,9 @@ class GSVD(BaseEmbedding):
         self.normalized = normalized
         self.solver = solver
 
+        self.embedding_ = None
+        self.embedding_row_ = None
+        self.embedding_col_ = None
         self.singular_values_ = None
         self.singular_vectors_left_ = None
         self.singular_vectors_right_ = None
@@ -130,8 +133,8 @@ class GSVD(BaseEmbedding):
 
         weights_row = adjacency_reg.dot(np.ones(n_col))
         weights_col = adjacency_reg.T.dot(np.ones(n_row))
-        diag_row = diag_pinv(np.power(weights_row, self.factor_row))
-        diag_col = diag_pinv(np.power(weights_col, self.factor_col))
+        diag_row = diagonal_pseudo_inverse(np.power(weights_row, self.factor_row))
+        diag_col = diagonal_pseudo_inverse(np.power(weights_col, self.factor_col))
         self.solver.fit(safe_sparse_dot(diag_row, safe_sparse_dot(adjacency_reg, diag_col)), n_components)
 
         singular_values = self.solver.singular_values_
@@ -195,8 +198,8 @@ class GSVD(BaseEmbedding):
 
         # weighting
         weights_row = adjacency_vectors.dot(np.ones(n_col))
-        diag_row = diag_pinv(np.power(weights_row, self.factor_row))
-        diag_col = diag_pinv(np.power(self.weights_col_, self.factor_col))
+        diag_row = diagonal_pseudo_inverse(np.power(weights_row, self.factor_row))
+        diag_col = diagonal_pseudo_inverse(np.power(self.weights_col_, self.factor_col))
         adjacency_vectors = safe_sparse_dot(diag_row, safe_sparse_dot(adjacency_vectors, diag_col))
 
         # projection in the embedding space
@@ -216,7 +219,7 @@ class GSVD(BaseEmbedding):
 
 
 class SVD(GSVD):
-    """Graph embedding by Singular Value Decomposition of the adjacency or biadjacency matrix of the graph.
+    r"""Graph embedding by Singular Value Decomposition of the adjacency or biadjacency matrix of the graph.
 
     Parameters
     ----------
@@ -241,12 +244,8 @@ class SVD(GSVD):
 
     Attributes
     ----------
-    embedding_ : array, shape = (n, n_components)
+    embedding_ : np.ndarray, shape = (n_nodes, n_components)
         Embedding of the nodes.
-    embedding_row_ : array, shape = (n_row, n_components)
-        Embedding of the rows, for bipartite graphs.
-    embedding_col_ : array, shape = (n_col, n_components)
-        Embedding of the columns, for bipartite graphs.
     singular_values_ : np.ndarray, shape = (n_components)
         Singular values.
     singular_vectors_left_ : np.ndarray, shape = (n_row, n_components)
@@ -277,13 +276,9 @@ class SVD(GSVD):
                                   factor_singular=factor_singular, factor_row=0., factor_col=0., normalized=normalized,
                                   solver=solver)
 
-    @staticmethod
-    def _check_adj_vector(adjacency_vectors: np.ndarray):
-        return
-
 
 class PCA(SVD):
-    """Graph embedding by Principal Component Analysis of the adjacency or biadjacency matrix.
+    r"""Graph embedding by Principal Component Analysis of the adjacency or biadjacency matrix.
 
     Parameters
     ----------
@@ -297,12 +292,8 @@ class PCA(SVD):
 
     Attributes
     ----------
-    embedding_ : array, shape = (n, n_components)
+    embedding_ : array, shape = (n_nodes, n_components)
         Embedding of the nodes.
-    embedding_row_ : array, shape = (n_row, n_components)
-        Embedding of the rows, for bipartite graphs.
-    embedding_col_ : array, shape = (n_col, n_components)
-        Embedding of the columns, for bipartite graphs.
     singular_values_ : np.ndarray, shape = (n_components)
         Singular values.
     singular_vectors_left_ : np.ndarray, shape = (n_row, n_components)

@@ -1,29 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
-"""The setup script."""
-
-
-from setuptools import find_packages, dist
-import distutils.util
-from distutils.core import setup, Extension
-from distutils.command.build_ext import build_ext
-import os
-from glob import glob
-
-dist.Distribution().fetch_build_eggs(['Cython', 'numpy==1.20.0'])
+"""Setup script."""
 
 import numpy
 
-with open('README.rst') as readme_file:
-    readme = readme_file.read()
-
-with open('HISTORY.rst') as history_file:
-    history = history_file.read()
-
-requirements = ['numpy>=1.20.2', 'scipy>=1.6.2']
-
-setup_requirements = ['pytest-runner']
+from setuptools import find_packages, setup, Extension
+from sysconfig import get_platform
+from distutils.command.build_ext import build_ext
+import os
+import builtins
+from glob import glob
 
 test_requirements = ['pytest', 'nose', 'pluggy>=0.7.1']
 
@@ -39,23 +25,26 @@ LINK_OPTIONS = {"other": []}
 EXTRA_COMPILE_ARGS = ['-fopenmp']
 EXTRA_LINK_ARGS = ['-fopenmp']
 
-# Check whether we're on OSX >= 10.10
-name = distutils.util.get_platform()
-if name.startswith("macosx-10"):
-    EXTRA_COMPILE_ARGS = ['-lomp']
-    EXTRA_LINK_ARGS = ['-lomp']
-    minor_version = int(name.split("-")[1].split(".")[1])
-    if minor_version >= 7:
+# Check whether we're on MacOSX >= 10.7
+platform = get_platform()
+if platform.startswith("macosx"):
+    EXTRA_COMPILE_ARGS = []
+    EXTRA_LINK_ARGS = []
+    # EXTRA_COMPILE_ARGS = ['-lomp']
+    # EXTRA_LINK_ARGS = ['-lomp']
+    version = platform.split("-")[1].split(".")
+    if int(version[0]) > 10 or (int(version[0]) == 10 and int(version[1]) >= 7):
         COMPILE_OPTIONS["other"].append("-stdlib=libc++")
         LINK_OPTIONS["other"].append("-lc++")
-        # g++ (used by unix compiler on mac) links to libstdc++ as a default lib.
-        # See: https://stackoverflow.com/questions/1653047/avoid-linking-to-libstdc
-        LINK_OPTIONS["other"].append("-nodefaultlibs")
-# Windows does not (yet) support OpenMP
-if name.startswith("win"):
-    EXTRA_COMPILE_ARGS = ['/d2FH4-']
-    EXTRA_LINK_ARGS = []
 
+# Windows does not (yet) support OpenMP
+if platform.startswith("win"):
+    # MSVC specific flags:
+    # /EHsc: enable C++ exceptions
+    # /O2: optimize
+    # /d2FH4-: workaround for MSVC function-level hotpatch flag
+    EXTRA_COMPILE_ARGS = ['/EHsc', '/O2', '/d2FH4-']
+    EXTRA_LINK_ARGS = []
 
 class BuildExtSubclass(build_ext):
     def build_options(self):
@@ -72,6 +61,12 @@ class BuildExtSubclass(build_ext):
         self.build_options()
         build_ext.build_extensions(self)
 
+    def finalize_options(self):
+        build_ext.finalize_options(self)
+        # Prevent numpy from thinking it is still in its setup process:
+        builtins.__NUMPY_SETUP__ = False
+        self.include_dirs.append(numpy.get_include())
+
 
 # Cython generation/C++ compilation
 pyx_paths = glob("./sknetwork/**/*.pyx")
@@ -87,6 +82,12 @@ if os.environ.get('SKNETWORK_DISABLE_CYTHONIZE') is None:
 else:
     HAVE_CYTHON = False
 
+if os.environ.get('WITH_CYTHON_PROFILE') is not None:
+    ext_define_macros = [('CYTHON_TRACE_NOGIL', '1')]
+    compiler_directives = {'linetrace': True}
+else:
+    ext_define_macros = []
+    compiler_directives = {}
 
 if HAVE_CYTHON:
     from Cython.Build import cythonize
@@ -100,52 +101,27 @@ if HAVE_CYTHON:
             # Remove C file to force Cython recompile.
             os.remove(c_path)
 
-        ext_modules += cythonize(Extension(name=mod_name, sources=[pyx_path], include_dirs=[numpy.get_include()],
+        ext_modules += cythonize(Extension(name=mod_name,
+                                           sources=[pyx_path],
+                                           include_dirs=[numpy.get_include()],
+                                           language='c++',
                                            extra_compile_args=EXTRA_COMPILE_ARGS,
-                                           extra_link_args=EXTRA_LINK_ARGS), annotate=True)
+                                           extra_link_args=EXTRA_LINK_ARGS,
+                                           define_macros=[('NOMINMAX', None)] + ext_define_macros),
+                                 annotate=True,
+                                 compiler_directives=compiler_directives)
 else:
-    ext_modules = [Extension(modules[index], [c_paths[index]], include_dirs=[numpy.get_include()])
+    ext_modules = [Extension(modules[index], [c_paths[index]], include_dirs=[numpy.get_include()], language='c++',
+                   define_macros=[('NOMINMAX', None)], extra_compile_args=EXTRA_COMPILE_ARGS, extra_link_args=EXTRA_LINK_ARGS)
                    for index in range(len(modules))]
 
 
 setup(
-    author="Scikit-network team",
-    author_email='bonald@enst.fr',
-    classifiers=[
-        'Development Status :: 3 - Alpha',
-        'Intended Audience :: Developers',
-        'Intended Audience :: Information Technology',
-        'Intended Audience :: Education',
-        'Intended Audience :: Science/Research',
-        'License :: OSI Approved :: BSD License',
-        'Natural Language :: English',
-        'Programming Language :: Cython',
-        'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9'
-    ],
-    description="Graph algorithms",
-    entry_points={
-        'console_scripts': [
-            'sknetwork=sknetwork.cli:main',
-        ],
-    },
-    install_requires=requirements,
-    license="BSD license",
-    long_description=readme + '\n\n' + history,
-    long_description_content_type='text/x-rst',
-    include_package_data=True,
-    keywords='sknetwork',
-    name='scikit-network',
     packages=find_packages(),
-    setup_requires=setup_requirements,
     test_suite='tests',
     tests_require=test_requirements,
-    url='https://github.com/sknetwork-team/scikit-network',
-    version='0.24.0',
     zip_safe=False,
     ext_modules=ext_modules,
     include_dirs=[numpy.get_include()],
     cmdclass={"build_ext": BuildExtSubclass}
 )
-

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # coding: utf-8
 """
-Created on January, 15 2021
+Created in January 2021
 @author: Thomas Bonald <bonald@enst.fr>
 """
+from abc import ABC
 from typing import Union
 
 import numpy as np
@@ -11,12 +12,12 @@ from scipy import sparse
 
 from sknetwork.embedding.base import BaseEmbedding
 from sknetwork.linalg import Regularizer, Normalizer, normalize
-from sknetwork.utils.check import check_random_state
+from sknetwork.utils.check import check_format, check_random_state
 from sknetwork.utils.format import get_adjacency
 
 
-class RandomProjection(BaseEmbedding):
-    """Embedding of graphs based the random projection of the adjacency matrix:
+class RandomProjection(BaseEmbedding, ABC):
+    r"""Embedding of graphs based the random projection of the adjacency matrix:
 
     :math:`(I + \\alpha A +... + (\\alpha A)^K)G`
 
@@ -45,12 +46,8 @@ class RandomProjection(BaseEmbedding):
 
     Attributes
     ----------
-    embedding_ : array, shape = (n, n_components)
+    embedding_ : array, shape = (n_nodes, n_components)
         Embedding of the nodes.
-    embedding_row_ : array, shape = (n_row, n_components)
-        Embedding of the rows, for bipartite graphs.
-    embedding_col_ : array, shape = (n_col, n_components)
-        Embedding of the columns, for bipartite graphs.
 
     Example
     -------
@@ -71,6 +68,7 @@ class RandomProjection(BaseEmbedding):
                  regularization: float = -1, normalized: bool = True, random_state: int = None):
         super(RandomProjection, self).__init__()
 
+        self.embedding_ = None
         self.n_components = n_components
         self.alpha = alpha
         self.n_iter = n_iter
@@ -81,20 +79,23 @@ class RandomProjection(BaseEmbedding):
         self.bipartite = None
         self.regularized = None
 
-    def fit(self, input_matrix: Union[sparse.csr_matrix, np.ndarray]) -> 'RandomProjection':
+    def fit(self, input_matrix: Union[sparse.csr_matrix, np.ndarray], force_bipartite: bool = False) \
+            -> 'RandomProjection':
         """Compute the graph embedding.
 
         Parameters
         ----------
-        input_matrix :
+        input_matrix : sparse.csr_matrix, np.ndarray
               Adjacency matrix or biadjacency matrix of the graph.
-
+        force_bipartite : bool (default = ``False``)
+            If ``True``, force the input matrix to be considered as a biadjacency matrix.
         Returns
         -------
         self: :class:`RandomProjection`
         """
         # input
-        adjacency, self.bipartite = get_adjacency(input_matrix)
+        input_matrix = check_format(input_matrix)
+        adjacency, self.bipartite = get_adjacency(input_matrix, force_bipartite=force_bipartite)
         n = adjacency.shape[0]
 
         # regularization

@@ -5,60 +5,36 @@ Utils
 
 Various tools for graph analysis.
 
-Build graphs
-------------
-
-.. autofunction:: sknetwork.utils.edgelist2adjacency
-
-.. autofunction:: sknetwork.utils.edgelist2biadjacency
-
 
 Convert graphs
 --------------
 
-.. autofunction:: sknetwork.utils.bipartite2directed
+.. autofunction:: sknetwork.utils.directed2undirected
 
 .. autofunction:: sknetwork.utils.bipartite2undirected
 
-.. autofunction:: sknetwork.utils.directed2undirected
+.. autofunction:: sknetwork.utils.bipartite2directed
 
 
-Get neighbors
--------------
+Neighborhood
+------------
+
+.. autofunction:: sknetwork.utils.get_degrees
+
+.. autofunction:: sknetwork.utils.get_weights
 
 .. autofunction:: sknetwork.utils.get_neighbors
 
 
-Clustering
-----------
-
-.. autofunction:: sknetwork.utils.membership_matrix
-
-.. autoclass:: sknetwork.utils.KMeansDense
-
-.. autoclass:: sknetwork.utils.WardDense
-
-
-Nearest-neighbors
+Membership matrix
 -----------------
 
-.. autoclass:: sknetwork.utils.KNNDense
+.. autofunction:: sknetwork.utils.get_membership
 
-.. autoclass:: sknetwork.utils.CNNDense
+.. autofunction:: sknetwork.utils.from_membership
 
+TF-IDF
+------
 
-Co-Neighborhood
----------------
-
-.. autofunction:: sknetwork.utils.co_neighbor_graph
-
-
-Projection
-----------
-
-.. autofunction:: sknetwork.utils.projection_simplex
-
-.. autofunction:: sknetwork.utils.projection_simplex_array
-
-.. autofunction:: sknetwork.utils.projection_simplex_csr
+.. autofunction:: sknetwork.utils.get_tfidf
 

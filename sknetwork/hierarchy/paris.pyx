@@ -1,7 +1,5 @@
 # distutils: language = c++
 # cython: language_level=3
-# cython: linetrace=True
-# distutils: define_macros=CYTHON_TRACE_NOGIL=1
 """
 Created on March 2019
 @author: Thomas Bonald <bonald@enst.fr>
@@ -21,7 +19,7 @@ from scipy import sparse
 
 from sknetwork.hierarchy.base import BaseHierarchy
 from sknetwork.hierarchy.postprocess import reorder_dendrogram
-from sknetwork.utils.format import get_adjacency, directed2undirected
+from sknetwork.utils.format import check_format, get_adjacency, directed2undirected
 from sknetwork.utils.check import get_probs, is_symmetric
 
 
@@ -64,7 +62,7 @@ cdef class AggregateGraph:
     def __init__(self, double[:] out_weights, double[:] in_weights, double[:] data, int[:] indices,
                  int[:] indptr):
         cdef int n = indptr.shape[0] - 1
-        cdef float total_weight = np.sum(data) / 2
+        cdef float total_weight = np.sum(data)
         cdef int i
         cdef int j
 
@@ -72,12 +70,9 @@ cdef class AggregateGraph:
         self.neighbors = {}
         for i in range(n):
             # normalize so that the sum of edge weights is equal to 1
-            # remove self-loops
-            tmp = {}
+            self.neighbors[i] = {}
             for j in range(indptr[i], indptr[i + 1]):
-                if indices[j] != i:
-                    tmp[indices[j]] = data[j] / total_weight
-            self.neighbors[i] = tmp
+                self.neighbors[i][indices[j]] = data[j] / total_weight
 
         cluster_sizes = {}
         cluster_out_weights = {}
@@ -129,20 +124,19 @@ cdef class AggregateGraph:
         """
         cdef int new_node = self.next_cluster
         self.neighbors[new_node] = {}
+        self.neighbors[new_node][new_node] = 0
         cdef set common_neighbors = set(self.neighbors[node1].keys()) & set(self.neighbors[node2].keys()) - {node1, node2}
         for node in common_neighbors:
-            self.neighbors[new_node][node] = self.neighbors[node1][node] + self.neighbors[node2][node]
+            self.neighbors[new_node][node] = self.neighbors[node1].pop(node) + self.neighbors[node2].pop(node)
             self.neighbors[node][new_node] = self.neighbors[node].pop(node1) + self.neighbors[node].pop(node2)
-        cdef set node1_neighbors = set(self.neighbors[node1].keys()) - set(self.neighbors[node2].keys()) - {node2}
-        for node in node1_neighbors:
-            self.neighbors[new_node][node] = self.neighbors[node1][node]
-            self.neighbors[node][new_node] = self.neighbors[node].pop(node1)
-        cdef set node2_neighbors = set(self.neighbors[node2].keys()) - set(self.neighbors[node1].keys()) - {node1}
-        for node in node2_neighbors:
-            self.neighbors[new_node][node] = self.neighbors[node2][node]
-            self.neighbors[node][new_node] = self.neighbors[node].pop(node2)
-        del self.neighbors[node1]
-        del self.neighbors[node2]
+        for node in {node1, node2}:
+            for neighbor in set(self.neighbors[node].keys()) - {node1, node2}:
+                self.neighbors[new_node][neighbor] = self.neighbors[node].pop(neighbor)
+                self.neighbors[neighbor][new_node] = self.neighbors[neighbor].pop(node)
+            for other_node in {node1, node2}:
+                if other_node in self.neighbors[node]:
+                    self.neighbors[new_node][new_node] += self.neighbors[node][other_node]
+            del self.neighbors[node]
         self.cluster_sizes[new_node] = self.cluster_sizes.pop(node1) + self.cluster_sizes.pop(node2)
         self.cluster_out_weights[new_node] = self.cluster_out_weights.pop(node1) + self.cluster_out_weights.pop(node2)
         self.cluster_in_weights[new_node] = self.cluster_in_weights.pop(node1) + self.cluster_in_weights.pop(node2)
@@ -163,22 +157,16 @@ class Paris(BaseHierarchy):
 
     Parameters
     ----------
-    weights :
+    weights : str
         Weights of nodes.
         ``'degree'`` (default) or ``'uniform'``.
-    reorder :
+    reorder : bool
         If ``True`` (default), reorder the dendrogram in non-decreasing order of height.
 
     Attributes
     ----------
-    dendrogram_ :
+    dendrogram_ : np.ndarray
         Dendrogram of the graph.
-    dendrogram_row_ :
-        Dendrogram for the rows, for bipartite graphs.
-    dendrogram_col_ :
-        Dendrogram for the columns, for bipartite graphs.
-    dendrogram_full_ :
-        Dendrogram for both rows and columns, indexed in this order, for bipartite graphs.
 
     Examples
     --------
@@ -186,7 +174,7 @@ class Paris(BaseHierarchy):
     >>> from sknetwork.data import house
     >>> paris = Paris()
     >>> adjacency = house()
-    >>> dendrogram = paris.fit_transform(adjacency)
+    >>> dendrogram = paris.fit_predict(adjacency)
     >>> np.round(dendrogram, 2)
     array([[3.        , 2.        , 0.17      , 2.        ],
            [1.        , 0.        , 0.25      , 2.        ],
@@ -211,19 +199,22 @@ class Paris(BaseHierarchy):
     """
     def __init__(self, weights: str = 'degree', reorder: bool = True):
         super(Paris, self).__init__()
+        self.dendrogram_ = None
         self.weights = weights
         self.reorder = reorder
         self.bipartite = None
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    def fit(self, input_matrix: Union[sparse.csr_matrix, np.ndarray]) -> 'Paris':
+    def fit(self, input_matrix: Union[sparse.csr_matrix, np.ndarray], force_bipartite: bool = False) -> 'Paris':
         """Agglomerative clustering using the nearest neighbor chain.
 
         Parameters
         ----------
-        input_matrix :
+        input_matrix : sparse.csr_matrix, np.ndarray
             Adjacency matrix or biadjacency matrix of the graph.
+        force_bipartite :
+            If ``True``, force the input matrix to be considered as a biadjacency matrix.
 
         Returns
         -------
@@ -232,7 +223,7 @@ class Paris(BaseHierarchy):
         self._init_vars()
 
         # input
-        adjacency, self.bipartite = get_adjacency(input_matrix)
+        adjacency, self.bipartite = get_adjacency(input_matrix, force_bipartite=force_bipartite)
 
         weights = self.weights
         out_weights = get_probs(weights, adjacency)
@@ -273,9 +264,9 @@ class Paris(BaseHierarchy):
             while chain.size():
                 node = chain[chain.size() - 1]
                 chain.pop_back()
-                if aggregate_graph.neighbors[node]:
+                if set(aggregate_graph.neighbors[node].keys()) - {node}:
                     max_sim = -float("inf")
-                    for neighbor in aggregate_graph.neighbors[node]:
+                    for neighbor in set(aggregate_graph.neighbors[node].keys()) - {node}:
                         sim = aggregate_graph.similarity(node, neighbor)
                         if sim > max_sim:
                             nearest_neighbor = neighbor

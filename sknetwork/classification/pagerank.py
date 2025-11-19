@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mar, 2020
-@author: Nathan de Lara <ndelara@enst.fr>
+Created in March 2020
+@author: Nathan de Lara <nathan.delara@polytechnique.org>
 """
 from typing import Optional
 
@@ -13,33 +13,25 @@ from sknetwork.ranking.pagerank import PageRank
 
 
 class PageRankClassifier(RankClassifier):
-    """Node classification by multiple personalized PageRanks.
+    r"""Node classification by multiple personalized PageRanks.
 
     Parameters
     ----------
-    damping_factor:
+    damping_factor: float
         Probability to continue the random walk.
-    solver : :obj:`str`
+    solver : str
         Which solver to use: 'piteration', 'diteration', 'bicgstab', 'lanczos'.
     n_iter : int
-        Number of iterations for some of the solvers such as ``'piteration'`` or ``'diteration'``.
+        Number of iterations for some solvers such as ``'piteration'`` or ``'diteration'``.
     tol : float
         Tolerance for the convergence of some solvers such as ``'bicgstab'`` or ``'lanczos'``.
 
     Attributes
     ----------
-    labels_ : np.ndarray, shape (n_labels,)
-        Label of each node.
-    membership_ : sparse.csr_matrix, shape (n_row, n_labels)
-        Membership matrix.
-    labels_row_ : np.ndarray
-        Labels of rows, for bipartite graphs.
-    labels_col_ : np.ndarray
-        Labels of columns, for bipartite graphs.
-    membership_row_ : sparse.csr_matrix, shape (n_row, n_labels)
-        Membership matrix of rows, for bipartite graphs.
-    membership_col_ : sparse.csr_matrix, shape (n_col, n_labels)
-        Membership matrix of columns, for bipartite graphs.
+    labels_ : np.ndarray, shape (n_nodes,)
+        Labels of nodes.
+    probs_ : sparse.csr_matrix, shape (n_nodes, n_labels)
+        Probability distribution over labels.
 
     Example
     -------
@@ -49,9 +41,9 @@ class PageRankClassifier(RankClassifier):
     >>> graph = karate_club(metadata=True)
     >>> adjacency = graph.adjacency
     >>> labels_true = graph.labels
-    >>> seeds = {0: labels_true[0], 33: labels_true[33]}
-    >>> labels_pred = pagerank.fit_transform(adjacency, seeds)
-    >>> np.round(np.mean(labels_pred == labels_true), 2)
+    >>> labels = {0: labels_true[0], 33: labels_true[33]}
+    >>> labels_pred = pagerank.fit_predict(adjacency, labels)
+    >>> float(np.round(np.mean(labels_pred == labels_true), 2))
     0.97
 
     References

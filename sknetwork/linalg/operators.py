@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # coding: utf-8
 """
-Created on Apr 2020
+Created in April 2020
 @author: Thomas Bonald <bonald@enst.fr>
-@author: Nathan de Lara <ndelara@enst.fr>
+@author: Nathan de Lara <nathan.delara@polytechnique.org>
 """
 from typing import Union
 
@@ -11,8 +11,8 @@ import numpy as np
 from scipy import sparse
 from scipy.sparse.linalg import LinearOperator
 
-from sknetwork.linalg import diag_pinv
-from sknetwork.linalg.normalization import normalize
+from sknetwork.linalg import diagonal_pseudo_inverse
+from sknetwork.linalg.normalizer import normalize
 from sknetwork.linalg.sparse_lowrank import SparseLR
 from sknetwork.utils.check import check_format
 
@@ -75,7 +75,7 @@ class Normalizer(LinearOperator):
         n_col = adjacency.shape[1]
         self.regularization = regularization
         self.adjacency = adjacency
-        self.norm_diag = diag_pinv(adjacency.dot(np.ones(n_col)) + regularization)
+        self.norm_diag = diagonal_pseudo_inverse(adjacency.dot(np.ones(n_col)) + regularization)
 
     def _matvec(self, matrix: np.ndarray):
         prod = self.adjacency.dot(matrix)
@@ -127,7 +127,7 @@ class Laplacian(LinearOperator):
         self.weights = adjacency.dot(np.ones(n))
         self.laplacian = sparse.diags(self.weights, format='csr') - adjacency
         if self.normalized_laplacian:
-            self.norm_diag = diag_pinv(np.sqrt(self.weights + regularization))
+            self.norm_diag = diagonal_pseudo_inverse(np.sqrt(self.weights + regularization))
 
     def _matvec(self, matrix: np.ndarray):
         if self.normalized_laplacian:
@@ -173,8 +173,8 @@ class CoNeighbor(LinearOperator):
     >>> from sknetwork.data import star_wars
     >>> biadjacency = star_wars(metadata=False)
     >>> d_out = biadjacency.dot(np.ones(3))
-    >>> coneigh = CoNeighbor(biadjacency)
-    >>> np.allclose(d_out, coneigh.dot(np.ones(4)))
+    >>> coneighbor = CoNeighbor(biadjacency)
+    >>> np.allclose(d_out, coneighbor.dot(np.ones(4)))
     True
     """
     def __init__(self, adjacency: Union[sparse.csr_matrix, np.ndarray], normalized: bool = True):

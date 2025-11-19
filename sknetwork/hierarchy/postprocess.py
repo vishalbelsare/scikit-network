@@ -16,7 +16,7 @@ import numpy as np
 from sknetwork.utils.check import check_n_clusters, check_dendrogram
 
 
-def reorder_dendrogram(dendrogram: np.ndarray):
+def reorder_dendrogram(dendrogram: np.ndarray) -> np.ndarray:
     """Reorder the dendrogram in non-decreasing order of height."""
     n = dendrogram.shape[0] + 1
     order = np.zeros((2, n - 1), float)
@@ -34,9 +34,7 @@ def reorder_dendrogram(dendrogram: np.ndarray):
 def get_labels(dendrogram: np.ndarray, cluster: dict, sort_clusters: bool, return_dendrogram: bool):
     """Returns the labels from clusters."""
     n = len(dendrogram) + 1
-    n_clusters = len(cluster)
     clusters = list(cluster.values())
-    index = None
     if sort_clusters:
         sizes = np.array([len(nodes) for nodes in clusters])
         index = np.argsort(-sizes)
@@ -77,17 +75,17 @@ def cut_straight(dendrogram: np.ndarray, n_clusters: Optional[int] = None, thres
 
     Parameters
     ----------
-    dendrogram:
+    dendrogram : np.ndarray
         Dendrogram.
-    n_clusters :
+    n_clusters : int
         Number of clusters (optional).
         The number of clusters can be larger than n_clusters in case of equal heights in the dendrogram.
-    threshold :
+    threshold : float
         Threshold on height (optional).
         If both n_clusters and threshold are ``None``, n_clusters is set to 2.
-    sort_clusters :
+    sort_clusters : bool
         If ``True``,  sorts clusters in decreasing order of size.
-    return_dendrogram :
+    return_dendrogram : bool
         If ``True``, returns the dendrogram formed by the clusters up to the root.
     Returns
     -------
@@ -106,8 +104,10 @@ def cut_straight(dendrogram: np.ndarray, n_clusters: Optional[int] = None, thres
     check_dendrogram(dendrogram)
     n = dendrogram.shape[0] + 1
 
-    if return_dendrogram and not np.all(np.diff(dendrogram[:, 2]) >= 0):
-        raise ValueError("The third column of the dendrogram must be non-decreasing.")
+    if return_dendrogram:
+        height = dendrogram[:, 2]
+        if not np.all(height[:-1] <= height[1:]):
+            dendrogram = reorder_dendrogram(dendrogram)
 
     cluster = {i: [i] for i in range(n)}
     if n_clusters is None:
@@ -135,13 +135,13 @@ def cut_balanced(dendrogram: np.ndarray, max_cluster_size: int = 20, sort_cluste
 
     Parameters
     ----------
-    dendrogram:
+    dendrogram : np.ndarray
         Dendrogram
-    max_cluster_size :
+    max_cluster_size : int
         Maximum size of each cluster.
-    sort_clusters :
+    sort_clusters : bool
         If ``True``, sort labels in decreasing order of cluster size.
-    return_dendrogram :
+    return_dendrogram : bool
         If ``True``, returns the dendrogram formed by the clusters up to the root.
     Returns
     -------
@@ -179,19 +179,19 @@ def aggregate_dendrogram(dendrogram: np.ndarray, n_clusters: int = 2, return_cou
 
     Parameters
     ----------
-    dendrogram:
+    dendrogram : np.ndarray
         The input to aggregate.
-    n_clusters:
+    n_clusters : int
         Number of clusters (or leaves) to keep.
-    return_counts
+    return_counts :  bool
         If ``True``, returns an array of counts corresponding to the sizes of the merged subtrees.
         The sum of the counts is equal to the number of samples in the input dendrogram.
 
     Returns
     -------
-    new_dendrogram:
+    new_dendrogram : np.ndarray
         Aggregated dendrogram. The nodes are reindexed from 0.
-    counts:
+    counts : np.ndarray
         Size of the subtrees corresponding to each leaf in new_dendrogram.
     """
     n_nodes: int = dendrogram.shape[0] + 1
@@ -220,12 +220,12 @@ def get_index(tree):
 
     Parameters
     ----------
-    tree:
+    tree :
         The tree to be indexed
 
     Returns
     -------
-    index:
+    index :
         The index of the root of the given tree
     """
     if type(tree) != list:
@@ -348,4 +348,3 @@ def split_dendrogram(dendrogram: np.ndarray, shape: tuple):
             id_col[n1 + n2 + t] = id_col.pop(j)
 
     return np.array(dendrogram_row), np.array(dendrogram_col)
-

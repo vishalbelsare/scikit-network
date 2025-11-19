@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Apr 2020
+Created in April 2020
 @author: Thomas Bonald <bonald@enst.fr>
-@author: Nathan de Lara <ndelara@enst.fr>
+@author: Nathan de Lara <nathan.delara@polytechnique.org>
 """
 import unittest
 
 from sknetwork.data.test_graphs import *
-from sknetwork.linalg import Laplacian, Normalizer, CoNeighbor, normalize
+from sknetwork.linalg import Laplacian, Normalizer, CoNeighbor
 from sknetwork.linalg.basics import safe_sparse_dot
 
 
 class TestOperators(unittest.TestCase):
 
     def test_laplacian(self):
-        for adjacency in [test_graph(), test_graph_disconnect()]:
+        for adjacency in [test_graph(), test_disconnected_graph()]:
             n = adjacency.shape[1]
             # regular Laplacian
             laplacian = Laplacian(adjacency)
@@ -35,7 +35,7 @@ class TestOperators(unittest.TestCase):
             self.assertEqual(safe_sparse_dot(laplacian, np.ones(shape)).shape, shape)
 
     def test_normalizer(self):
-        for adjacency in [test_graph(), test_graph_disconnect()]:
+        for adjacency in [test_graph(), test_disconnected_graph()]:
             n_row, n_col = adjacency.shape
             # square matrix
             normalizer = Normalizer(adjacency)
@@ -43,9 +43,9 @@ class TestOperators(unittest.TestCase):
             self.assertAlmostEqual(np.linalg.norm(normalizer.dot(np.ones(n_col)) - non_zeros), 0)
             # single row
             normalizer = Normalizer(adjacency[1])
-            self.assertAlmostEqual(float(normalizer.dot(np.ones(n_col))), 1)
+            self.assertAlmostEqual(float(normalizer.dot(np.ones(n_col))[0]), 1)
             normalizer = Normalizer(adjacency[2].toarray().ravel())
-            self.assertAlmostEqual(float(normalizer.dot(np.ones(n_col))), 1)
+            self.assertAlmostEqual(float(normalizer.dot(np.ones(n_col))[0]), 1)
             # regularization
             normalizer = Normalizer(adjacency, 1)
             self.assertAlmostEqual(np.linalg.norm(normalizer.dot(np.ones(n_col)) - np.ones(n_row)), 0)
@@ -53,10 +53,6 @@ class TestOperators(unittest.TestCase):
     def test_coneighbors(self):
         biadjacency = test_bigraph()
         operator = CoNeighbor(biadjacency)
-        transition = normalize(operator)
-        x = transition.dot(np.ones(transition.shape[1]))
-
-        self.assertAlmostEqual(np.linalg.norm(x - np.ones(operator.shape[0])), 0)
         operator.astype('float')
         operator.right_sparse_dot(sparse.eye(operator.shape[1], format='csr'))
 

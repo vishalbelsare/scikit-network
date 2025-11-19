@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Apr 2020
-@author: Nathan de Lara <ndelara@enst.fr>
+@author: Nathan de Lara <nathan.delara@polytechnique.org>
 """
 from typing import Union
 
@@ -12,7 +12,7 @@ from scipy.sparse.linalg import eigs, LinearOperator, bicgstab
 
 from sknetwork.linalg.diteration import diffusion
 from sknetwork.linalg.push import push_pagerank
-from sknetwork.linalg.normalization import normalize
+from sknetwork.linalg.normalizer import normalize
 from sknetwork.linalg.polynome import Polynome
 
 

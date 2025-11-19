@@ -3,29 +3,38 @@
 """"tests for shortest_path.py"""
 import unittest
 
-from sknetwork.data import karate_club, cyclic_digraph
-# has to specify the exact file to avoid nosetests error on full tests
-from sknetwork.path.shortest_path import distance, shortest_path
+from sknetwork.data.test_graphs import *
+from sknetwork.path.shortest_path import get_shortest_path
 
 
 class TestShortestPath(unittest.TestCase):
 
-    def test_parallel(self):
-        adjacency = karate_club()
-        dist1 = distance(adjacency)
-        dist2 = distance(adjacency, n_jobs=-1)
-        self.assertTrue((dist1 == dist2).all())
+    def test_path(self):
+        adjacency = test_graph_empty()
+        path = get_shortest_path(adjacency, 0)
+        self.assertEqual(path.nnz, 0)
 
-    def test_predecessors(self):
-        adjacency = karate_club()
-        _, predecessors = distance(adjacency, return_predecessors=True)
-        self.assertTupleEqual(predecessors.shape, adjacency.shape)
+        adjacency = test_graph()
+        path = get_shortest_path(adjacency, 0)
+        self.assertEqual(path.nnz, 10)
+        path = get_shortest_path(adjacency, [0, 4, 6])
+        self.assertEqual(path.nnz, 10)
+        path = get_shortest_path(adjacency, np.arange(10))
+        self.assertEqual(path.nnz, 0)
+        path = get_shortest_path(adjacency, [0, 5])
+        self.assertEqual(path.nnz, 9)
 
-    def test_shortest_paths(self):
-        with self.assertRaises(ValueError):
-            shortest_path(cyclic_digraph(3), [0, 1], [0, 1])
+        adjacency = test_disconnected_graph()
+        path = get_shortest_path(adjacency, 4)
+        self.assertEqual(path.nnz, 5)
 
-    def test_error_on_parallel_FW(self):
-        adjacency = karate_club()
-        self.assertRaises(ValueError, distance, adjacency, n_jobs=2, method='FW')
+        adjacency = test_digraph()
+        path = get_shortest_path(adjacency, 0)
+        self.assertEqual(path.nnz, 5)
 
+        biadjacency = test_bigraph()
+        path = get_shortest_path(biadjacency, 0)
+        self.assertEqual(path.nnz, 3)
+        self.assertTrue(path.shape[0] == np.sum(biadjacency.shape))
+        path = get_shortest_path(biadjacency, source_col=np.arange(biadjacency.shape[1]))
+        self.assertEqual(path.nnz, biadjacency.nnz)

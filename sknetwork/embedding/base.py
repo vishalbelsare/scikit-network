@@ -1,33 +1,39 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Nov, 2019
-@author: Nathan de Lara <ndelara@enst.fr>
+Created in November 2019
+@author: Nathan de Lara <nathan.delara@polytechnique.org>
 """
 from abc import ABC
+from typing import Optional, Union
 
 import numpy as np
 from scipy import sparse
 
 from sknetwork.topology.structure import is_connected
-from sknetwork.utils.base import Algorithm
+from sknetwork.base import Algorithm
 
 
 class BaseEmbedding(Algorithm, ABC):
-    """Base class for embedding algorithms.
+    r"""Base class for embedding algorithms.
 
     Attributes
     ----------
-    embedding_ : array, shape = (n, n_components)
+    embedding_ : np.ndarray, shape = (n_nodes, n_components)
         Embedding of the nodes.
-    embedding_row_ : array, shape = (n_row, n_components)
-        Embedding of the rows, for bipartite graphs.
-    embedding_col_ : array, shape = (n_col, n_components)
-        Embedding of the columns, for bipartite graphs.
     """
-
     def __init__(self):
         self._init_vars()
+
+    def transform(self) -> np.ndarray:
+        """Return the embedding.
+
+        Returns
+        -------
+        embedding : np.ndarray
+            Embedding.
+        """
+        return self.embedding_
 
     def fit_transform(self, *args, **kwargs) -> np.ndarray:
         """Fit to data and return the embedding. Same parameters as the ``fit`` method.
@@ -40,12 +46,22 @@ class BaseEmbedding(Algorithm, ABC):
         self.fit(*args, **kwargs)
         return self.embedding_
 
-    def _check_fitted(self):
-        if self.embedding_ is None:
-            raise ValueError("This embedding instance is not fitted yet."
-                             " Call 'fit' with appropriate arguments before using this method.")
-        else:
-            return self
+    def predict(self, columns: bool = False) -> np.ndarray:
+        """Return the embedding of nodes.
+
+        Parameters
+        ----------
+        columns : bool
+            If ``True``, return the prediction for columns.
+
+        Returns
+        -------
+        embedding : np.ndarray
+            Embedding of the nodes.
+        """
+        if columns:
+            return self.embedding_col_
+        return self.embedding_
 
     @staticmethod
     def _get_regularization(regularization: float, adjacency: sparse.csr_matrix) -> float:
@@ -61,6 +77,9 @@ class BaseEmbedding(Algorithm, ABC):
         self.embedding_ = None
         self.embedding_row_ = None
         self.embedding_col_ = None
+
+    def _check_fitted(self):
+        return self.embedding_ is not None
 
     def _split_vars(self, shape):
         """Split labels_ into labels_row_ and labels_col_"""

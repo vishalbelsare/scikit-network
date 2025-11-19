@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Jul 1, 2019
+Created in July 2019
 @author: Thomas Bonald <bonald@enst.fr>
 @author: Quentin Lutz <qlutz@enst.fr>
-@author: Nathan de Lara <ndelara@enst.fr>
+@author: Nathan de Lara <nathan.delara@polytechnique.org>
 """
 from math import pi
 from typing import Union, Optional, Iterable
@@ -12,15 +12,15 @@ from typing import Union, Optional, Iterable
 import numpy as np
 from scipy import sparse
 
-from sknetwork.utils import Bunch
+from sknetwork.data.base import Dataset
+from sknetwork.data.parse import from_edge_list
 from sknetwork.utils.check import check_random_state
 from sknetwork.utils.format import directed2undirected
-from sknetwork.utils.parse import edgelist2adjacency
 
 
 def block_model(sizes: Iterable, p_in: Union[float, list, np.ndarray] = .2, p_out: float = .05,
-                seed: Optional[int] = None, metadata: bool = False) \
-                -> Union[sparse.csr_matrix, Bunch]:
+                directed: bool = False, self_loops: bool = False, metadata: bool = False, seed: Optional[int] = None) \
+                -> Union[sparse.csr_matrix, Dataset]:
     """Stochastic block model.
 
     Parameters
@@ -31,14 +31,17 @@ def block_model(sizes: Iterable, p_in: Union[float, list, np.ndarray] = .2, p_ou
         Probability of connection within blocks.
     p_out :
         Probability of connection across blocks.
+    directed :
+        If ``True``, return a directed graph.
+    self_loops :
+         If ``True``, allow self-loops.
+    metadata :
+        If ``True``, return a `Dataset` object with labels.
     seed :
         Seed of the random generator (optional).
-    metadata :
-        If ``True``, return a `Bunch` object with metadata.
-
     Returns
     -------
-    adjacency or graph : Union[sparse.csr_matrix, Bunch]
+    adjacency or graph : Union[sparse.csr_matrix, Dataset]
         Adjacency matrix or graph with metadata (labels).
 
     Example
@@ -56,33 +59,31 @@ def block_model(sizes: Iterable, p_in: Union[float, list, np.ndarray] = .2, p_ou
     Journal of Machine Learning Research.
     """
     random_state = check_random_state(seed)
-    sizes = np.array(sizes)
 
-    if isinstance(p_in, (np.floating, float)):
+    if isinstance(p_in, (np.floating, float, int)):
         p_in = p_in * np.ones_like(sizes)
     else:
         p_in = np.array(p_in)
 
-    # each edge is considered twice
-    p_in = p_in / 2
-
-    matrix = []
+    blocks = []
     for i, a in enumerate(sizes):
         row = []
         for j, b in enumerate(sizes):
-            if j < i:
-                row.append(None)
-            elif j > i:
-                row.append(sparse.random(a, b, p_out, dtype=bool, random_state=random_state))
-            else:
+            if j == i:
                 row.append(sparse.random(a, a, p_in[i], dtype=bool, random_state=random_state))
-        matrix.append(row)
-    adjacency = sparse.bmat(matrix)
-    adjacency.setdiag(0)
-    adjacency = directed2undirected(adjacency.tocsr(), weighted=False)
-
+            else:
+                row.append(sparse.random(a, b, p_out, dtype=bool, random_state=random_state))
+        blocks.append(row)
+    adjacency = sparse.bmat(blocks)
+    if not self_loops:
+        adjacency = sparse.lil_matrix(adjacency)
+        adjacency.setdiag(0)
+    if directed:
+        adjacency = sparse.csr_matrix(adjacency)
+    else:
+        adjacency = directed2undirected(sparse.csr_matrix(sparse.triu(adjacency)), weighted=False)
     if metadata:
-        graph = Bunch()
+        graph = Dataset()
         graph.adjacency = adjacency
         labels = np.repeat(np.arange(len(sizes)), sizes)
         graph.labels = labels
@@ -91,7 +92,8 @@ def block_model(sizes: Iterable, p_in: Union[float, list, np.ndarray] = .2, p_ou
         return adjacency
 
 
-def erdos_renyi(n: int = 20, p: float = .3, seed: Optional[int] = None) -> sparse.csr_matrix:
+def erdos_renyi(n: int = 20, p: float = .3, directed: bool = False, self_loops: bool = False,
+                seed: Optional[int] = None) -> sparse.csr_matrix:
     """Erdos-Renyi graph.
 
     Parameters
@@ -100,6 +102,10 @@ def erdos_renyi(n: int = 20, p: float = .3, seed: Optional[int] = None) -> spars
          Number of nodes.
     p :
         Probability of connection between nodes.
+    directed :
+        If ``True``, return a directed graph.
+    self_loops :
+         If ``True``, allow self-loops.
     seed :
         Seed of the random generator (optional).
 
@@ -120,10 +126,10 @@ def erdos_renyi(n: int = 20, p: float = .3, seed: Optional[int] = None) -> spars
     Erdős, P., Rényi, A. (1959). `On Random Graphs. <https://www.renyi.hu/~p_erdos/1959-11.pdf>`_
     Publicationes Mathematicae.
     """
-    return block_model(np.array([n]), p, 0., seed, metadata=False)
+    return block_model([n], p, 0., directed=directed, self_loops=self_loops, metadata=False, seed=seed)
 
 
-def linear_digraph(n: int = 3, metadata: bool = False) -> Union[sparse.csr_matrix, Bunch]:
+def linear_digraph(n: int = 3, metadata: bool = False) -> Union[sparse.csr_matrix, Dataset]:
     """Linear graph (directed).
 
     Parameters
@@ -131,11 +137,11 @@ def linear_digraph(n: int = 3, metadata: bool = False) -> Union[sparse.csr_matri
     n : int
         Number of nodes.
     metadata : bool
-        If ``True``, return a `Bunch` object with metadata.
+        If ``True``, return a `Dataset` object with metadata.
 
     Returns
     -------
-    adjacency or graph : Union[sparse.csr_matrix, Bunch]
+    adjacency or graph : Union[sparse.csr_matrix, Dataset]
         Adjacency matrix or graph with metadata (positions).
 
     Example
@@ -152,7 +158,7 @@ def linear_digraph(n: int = 3, metadata: bool = False) -> Union[sparse.csr_matri
     if metadata:
         x = np.arange(n)
         y = np.zeros(n)
-        graph = Bunch()
+        graph = Dataset()
         graph.adjacency = adjacency
         graph.position = np.array((x, y)).T
         return graph
@@ -160,7 +166,7 @@ def linear_digraph(n: int = 3, metadata: bool = False) -> Union[sparse.csr_matri
         return adjacency
 
 
-def linear_graph(n: int = 3, metadata: bool = False) -> Union[sparse.csr_matrix, Bunch]:
+def linear_graph(n: int = 3, metadata: bool = False) -> Union[sparse.csr_matrix, Dataset]:
     """Linear graph (undirected).
 
     Parameters
@@ -168,11 +174,11 @@ def linear_graph(n: int = 3, metadata: bool = False) -> Union[sparse.csr_matrix,
     n : int
         Number of nodes.
     metadata : bool
-        If ``True``, return a `Bunch` object with metadata.
+        If ``True``, return a `Dataset` object with metadata.
 
     Returns
     -------
-    adjacency or graph : Union[sparse.csr_matrix, Bunch]
+    adjacency or graph : Union[sparse.csr_matrix, Dataset]
         Adjacency matrix or graph with metadata (positions).
 
     Example
@@ -212,7 +218,7 @@ def cyclic_position(n: int) -> np.ndarray:
     return position
 
 
-def cyclic_digraph(n: int = 3, metadata: bool = False) -> Union[sparse.csr_matrix, Bunch]:
+def cyclic_digraph(n: int = 3, metadata: bool = False) -> Union[sparse.csr_matrix, Dataset]:
     """Cyclic graph (directed).
 
     Parameters
@@ -220,11 +226,11 @@ def cyclic_digraph(n: int = 3, metadata: bool = False) -> Union[sparse.csr_matri
     n : int
         Number of nodes.
     metadata : bool
-        If ``True``, return a `Bunch` object with metadata.
+        If ``True``, return a `Dataset` object with metadata.
 
     Returns
     -------
-    adjacency or graph : Union[sparse.csr_matrix, Bunch]
+    adjacency or graph : Union[sparse.csr_matrix, Dataset]
         Adjacency matrix or graph with metadata (positions).
 
     Example
@@ -239,7 +245,7 @@ def cyclic_digraph(n: int = 3, metadata: bool = False) -> Union[sparse.csr_matri
     adjacency = sparse.csr_matrix((np.ones(len(row), dtype=int), (row, col)), shape=(n, n))
 
     if metadata:
-        graph = Bunch()
+        graph = Dataset()
         graph.adjacency = adjacency
         graph.position = cyclic_position(n)
         return graph
@@ -247,7 +253,7 @@ def cyclic_digraph(n: int = 3, metadata: bool = False) -> Union[sparse.csr_matri
         return adjacency
 
 
-def cyclic_graph(n: int = 3, metadata: bool = False) -> Union[sparse.csr_matrix, Bunch]:
+def cyclic_graph(n: int = 3, metadata: bool = False) -> Union[sparse.csr_matrix, Dataset]:
     """Cyclic graph (undirected).
 
     Parameters
@@ -255,11 +261,11 @@ def cyclic_graph(n: int = 3, metadata: bool = False) -> Union[sparse.csr_matrix,
     n : int
         Number of nodes.
     metadata : bool
-        If ``True``, return a `Bunch` object with metadata.
+        If ``True``, return a `Dataset` object with metadata.
 
     Returns
     -------
-    adjacency or graph : Union[sparse.csr_matrix, Bunch]
+    adjacency or graph : Union[sparse.csr_matrix, Dataset]
         Adjacency matrix or graph with metadata (positions).
 
     Example
@@ -277,7 +283,7 @@ def cyclic_graph(n: int = 3, metadata: bool = False) -> Union[sparse.csr_matrix,
         return graph.adjacency
 
 
-def grid(n1: int = 10, n2: int = 10, metadata: bool = False) -> Union[sparse.csr_matrix, Bunch]:
+def grid(n1: int = 10, n2: int = 10, metadata: bool = False) -> Union[sparse.csr_matrix, Dataset]:
     """Grid (undirected).
 
     Parameters
@@ -285,11 +291,11 @@ def grid(n1: int = 10, n2: int = 10, metadata: bool = False) -> Union[sparse.csr
     n1, n2 : int
         Grid dimension.
     metadata : bool
-        If ``True``, return a `Bunch` object with metadata.
+        If ``True``, return a `Dataset` object with metadata.
 
     Returns
     -------
-    adjacency or graph : Union[sparse.csr_matrix, Bunch]
+    adjacency or graph : Union[sparse.csr_matrix, Dataset]
         Adjacency matrix or graph with metadata (positions).
 
     Example
@@ -304,9 +310,9 @@ def grid(n1: int = 10, n2: int = 10, metadata: bool = False) -> Union[sparse.csr
     edges += [((i1, i2), (i1, i2 + 1)) for i1 in range(n1) for i2 in range(n2 - 1)]
     node_id = {u: i for i, u in enumerate(nodes)}
     edges = list(map(lambda edge: (node_id[edge[0]], node_id[edge[1]]), edges))
-    adjacency = edgelist2adjacency(edges, undirected=True)
+    adjacency = from_edge_list(edges, reindex=False, matrix_only=True)
     if metadata:
-        graph = Bunch()
+        graph = Dataset()
         graph.adjacency = adjacency
         graph.position = np.array(nodes)
         return graph
@@ -314,7 +320,7 @@ def grid(n1: int = 10, n2: int = 10, metadata: bool = False) -> Union[sparse.csr
         return adjacency
 
 
-def star(n_branches: int = 3, metadata: bool = False) -> Union[sparse.csr_matrix, Bunch]:
+def star(n_branches: int = 3, metadata: bool = False) -> Union[sparse.csr_matrix, Dataset]:
     """Star (undirected).
 
     Parameters
@@ -322,11 +328,11 @@ def star(n_branches: int = 3, metadata: bool = False) -> Union[sparse.csr_matrix
     n_branches : int
         Number of branches.
     metadata : bool
-        If ``True``, return a `Bunch` object with metadata (positions).
+        If ``True``, return a `Dataset` object with metadata (positions).
 
     Returns
     -------
-    adjacency or graph : Union[sparse.csr_matrix, Bunch]
+    adjacency or graph : Union[sparse.csr_matrix, Dataset]
         Adjacency matrix or graph with metadata (positions).
 
     Example
@@ -337,18 +343,20 @@ def star(n_branches: int = 3, metadata: bool = False) -> Union[sparse.csr_matrix
     (4, 4)
     """
     edges = [(0, i+1) for i in range(n_branches)]
-    adjacency = edgelist2adjacency(edges, undirected=True)
+    adjacency = from_edge_list(edges, reindex=False, matrix_only=True)
     if metadata:
-        graph = Bunch()
+        graph = Dataset()
         graph.adjacency = adjacency
         angles = 2 * np.pi * np.arange(n_branches) / n_branches
-        graph.position = np.vstack([np.cos(angles), np.sin(angles)]).T
+        x = [0] + list(np.cos(angles))
+        y = [0] + list(np.sin(angles))
+        graph.position = np.vstack([x, y]).T
         return graph
     else:
         return adjacency
 
 
-def albert_barabasi(n: int = 100, degree: int = 3, undirected: bool = True, seed: Optional[int] = None) \
+def albert_barabasi(n: int = 100, degree: int = 3, directed: bool = False, seed: Optional[int] = None) \
         -> sparse.csr_matrix:
     """Albert-Barabasi model.
 
@@ -358,8 +366,8 @@ def albert_barabasi(n: int = 100, degree: int = 3, undirected: bool = True, seed
         Number of nodes.
     degree : int
         Degree of incoming nodes (less than **n**).
-    undirected : bool
-        If ``True``, return an undirected graph.
+    directed : bool
+        If ``True``, return a directed graph.
     seed :
         Seed of the random generator (optional).
 
@@ -390,11 +398,11 @@ def albert_barabasi(n: int = 100, degree: int = 3, undirected: bool = True, seed
         degrees[neighbors] += 1
         degrees[i] = degree
         edges += [(i, j) for j in neighbors]
-    return edgelist2adjacency(edges, undirected)
+    return from_edge_list(edges, directed=directed, reindex=False, matrix_only=True)
 
 
 def watts_strogatz(n: int = 100, degree: int = 6, prob: float = 0.05, seed: Optional[int] = None,
-                   metadata: bool = False) -> Union[sparse.csr_matrix, Bunch]:
+                   metadata: bool = False) -> Union[sparse.csr_matrix, Dataset]:
     """Watts-Strogatz model.
 
     Parameters
@@ -408,10 +416,10 @@ def watts_strogatz(n: int = 100, degree: int = 6, prob: float = 0.05, seed: Opti
     seed :
         Seed of the random generator (optional).
     metadata :
-        If ``True``, return a `Bunch` object with metadata.
+        If ``True``, return a `Dataset` object with metadata.
     Returns
     -------
-    adjacency or graph : Union[sparse.csr_matrix, Bunch]
+    adjacency or graph : Union[sparse.csr_matrix, Dataset]
         Adjacency matrix or graph with metadata (positions).
 
     Example
@@ -443,7 +451,7 @@ def watts_strogatz(n: int = 100, degree: int = 6, prob: float = 0.05, seed: Opti
                 adjacency[j, i] = 0
     adjacency = sparse.csr_matrix(adjacency, shape=adjacency.shape)
     if metadata:
-        graph = Bunch()
+        graph = Dataset()
         graph.adjacency = adjacency
         graph.position = cyclic_position(n)
         return graph

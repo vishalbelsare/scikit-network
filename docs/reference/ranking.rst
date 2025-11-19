@@ -11,14 +11,6 @@ PageRank
 --------
 .. autoclass:: sknetwork.ranking.PageRank
 
-Diffusion
----------
-.. autoclass:: sknetwork.ranking.Diffusion
-
-Dirichlet
----------
-.. autoclass:: sknetwork.ranking.Dirichlet
-
 Katz
 ----
 .. autoclass:: sknetwork.ranking.Katz
@@ -34,10 +26,6 @@ Betweenness centrality
 Closeness centrality
 --------------------
 .. autoclass:: sknetwork.ranking.Closeness
-
-Harmonic centrality
--------------------
-.. autoclass:: sknetwork.ranking.Harmonic
 
 Post-processing
 ---------------

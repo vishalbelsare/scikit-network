@@ -20,9 +20,7 @@ Louvain
 -------
 .. autoclass:: sknetwork.hierarchy.LouvainHierarchy
 
-Ward
-----
-.. autoclass:: sknetwork.hierarchy.Ward
+.. autoclass:: sknetwork.hierarchy.LouvainIteration
 
 Metrics
 -------
@@ -38,3 +36,8 @@ Cuts
 
 .. autofunction:: sknetwork.hierarchy.cut_balanced
 
+Dendrograms
+-----------
+.. autofunction:: sknetwork.hierarchy.aggregate_dendrogram
+
+.. autofunction:: sknetwork.hierarchy.reorder_dendrogram

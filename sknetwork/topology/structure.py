@@ -1,107 +1,134 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Jul 24, 2019
-@author: Nathan de Lara <ndelara@enst.fr>
+Created in July 2019
+@author: Nathan de Lara <nathan.delara@polytechnique.org>
 @author: Quentin Lutz <qlutz@enst.fr>
+@author: Thomas Bonald <tbonald@enst.fr>
 """
-from typing import Tuple, Optional, Union
+from typing import Tuple, Optional, Union, List
 
 import numpy as np
 from scipy import sparse
 
-from sknetwork.utils.check import is_symmetric, is_square, check_format
+from sknetwork.utils.check import is_symmetric, check_format
+from sknetwork.utils.format import get_adjacency
+from sknetwork.path import get_distances
 
 
-def get_connected_components(adjacency: sparse.csr_matrix, connection: str = 'weak') -> np.ndarray:
-    """Extract the connected components of the graph.
-
-    Based on SciPy (scipy.sparse.csgraph.connected_components).
+def get_connected_components(input_matrix: sparse.csr_matrix, connection: str = 'weak', force_bipartite: bool = False) \
+        -> np.ndarray:
+    """Extract the connected components of a graph.
 
     Parameters
     ----------
-    adjacency :
-        Adjacency matrix of the graph.
+    input_matrix :
+        Input matrix (either the adjacency matrix or the biadjacency matrix of the graph).
     connection :
         Must be ``'weak'`` (default) or ``'strong'``. The type of connection to use for directed graphs.
+    force_bipartite : bool
+        If ``True``, consider the input matrix as the biadjacency matrix of a bipartite graph.
 
     Returns
     -------
-    labels : np.ndarray
+    labels :
         Connected component of each node.
+        For bipartite graphs, rows and columns are concatenated (rows first).
+
+    Example
+    -------
+    >>> from sknetwork.topology import get_connected_components
+    >>> from sknetwork.data import house
+    >>> get_connected_components(house())
+    array([0, 0, 0, 0, 0], dtype=int32)
     """
-    adjacency = check_format(adjacency)
-    if len(adjacency.data) == 0:
+    input_matrix = check_format(input_matrix)
+    if len(input_matrix.data) == 0:
         raise ValueError('The graph is empty (no edge).')
-    return sparse.csgraph.connected_components(adjacency, not is_symmetric(adjacency), connection, True)[1]
+    adjacency, _ = get_adjacency(input_matrix, force_bipartite=force_bipartite)
+    labels = sparse.csgraph.connected_components(adjacency, connection=connection, return_labels=True)[1]
+    return labels
 
 
-def is_connected(adjacency: sparse.csr_matrix, connection: str = 'weak') -> bool:
-    """Return True if the graph is connected.
+def is_connected(input_matrix: sparse.csr_matrix, connection: str = 'weak', force_bipartite: bool = False) -> bool:
+    """Check whether the graph is connected.
+
     Parameters
     ----------
-    adjacency :
-        Adjacency matrix of the graph.
+    input_matrix :
+        Input matrix (either the adjacency matrix or the biadjacency matrix of the graph).
     connection :
         Must be ``'weak'`` (default) or ``'strong'``. The type of connection to use for directed graphs.
+    force_bipartite : bool
+        If ``True``, consider the input matrix as the biadjacency matrix of a bipartite graph.
+
+    Example
+    -------
+    >>> from sknetwork.topology import is_connected
+    >>> from sknetwork.data import house
+    >>> is_connected(house())
+    True
     """
-    return len(set(get_connected_components(adjacency, connection))) == 1
+    return len(set(get_connected_components(input_matrix, connection, force_bipartite))) == 1
 
 
-def get_largest_connected_component(adjacency: Union[sparse.csr_matrix, np.ndarray], return_labels: bool = False):
+def get_largest_connected_component(input_matrix: sparse.csr_matrix, connection: str = "weak",
+                                    force_bipartite: bool = False, return_index: bool = False) \
+        -> Union[sparse.csr_matrix, Tuple[sparse.csr_matrix, np.ndarray]]:
     """Extract the largest connected component of a graph. Bipartite graphs are treated as undirected.
 
     Parameters
     ----------
-    adjacency :
-        Adjacency or biadjacency matrix of the graph.
-    return_labels : bool
-        Whether to return the indices of the new nodes in the original graph.
+    input_matrix :
+        Adjacency matrix or biadjacency matrix of the graph.
+    connection :
+        Must be ``'weak'`` (default) or ``'strong'``. The type of connection to use for directed graphs.
+    force_bipartite : bool
+        If ``True``, consider the input matrix as the biadjacency matrix of a bipartite graph.
+    return_index : bool
+        Whether to return the index of the nodes of the largest connected component in the original graph.
 
     Returns
     -------
-    new_adjacency : sparse.csr_matrix
-        Adjacency or biadjacency matrix of the largest connected component.
-    indices : array or tuple of array
-        Indices of the nodes in the original graph. For biadjacency matrices,
-        ``indices[0]`` corresponds to the rows and ``indices[1]`` to the columns.
-    """
-    adjacency = check_format(adjacency)
-    n_row, n_col = adjacency.shape
-    if not is_square(adjacency):
-        bipartite: bool = True
-        full_adjacency = sparse.bmat([[None, adjacency], [adjacency.T, None]], format='csr')
-    else:
-        bipartite: bool = False
-        full_adjacency = adjacency
+    output_matrix : sparse.csr_matrix
+        Adjacency matrix or biadjacency matrix of the largest connected component.
+    index : array
+        Indices of the nodes in the original graph.
+        For bipartite graphs, rows and columns are concatenated (rows first).
 
-    labels = get_connected_components(full_adjacency)
+    Example
+    -------
+    >>> from sknetwork.topology import get_largest_connected_component
+    >>> from sknetwork.data import house
+    >>> get_largest_connected_component(house()).shape
+    (5, 5)
+    """
+    input_matrix = check_format(input_matrix)
+    adjacency, bipartite = get_adjacency(input_matrix, force_bipartite=force_bipartite)
+    labels = get_connected_components(adjacency, connection=connection)
     unique_labels, counts = np.unique(labels, return_counts=True)
-    component_label = unique_labels[np.argmax(counts)]
-    component_indices = np.where(labels == component_label)[0]
+    largest_component_label = unique_labels[np.argmax(counts)]
 
     if bipartite:
-        split_ix = np.searchsorted(component_indices, n_row)
-        row_ix, col_ix = component_indices[:split_ix], component_indices[split_ix:] - n_row
+        n_row, n_col = input_matrix.shape
+        index_row = np.argwhere(labels[:n_row] == largest_component_label).ravel()
+        index_col = np.argwhere(labels[n_row:] == largest_component_label).ravel()
+        index = np.hstack((index_row, index_col))
+        output_matrix = input_matrix[index_row, :]
+        output_matrix = (output_matrix.tocsc()[:, index_col]).tocsr()
     else:
-        row_ix, col_ix = component_indices, component_indices
-    new_adjacency = adjacency[row_ix, :]
-    new_adjacency = (new_adjacency.tocsc()[:, col_ix]).tocsr()
-
-    if return_labels:
-        if bipartite:
-            return new_adjacency, (row_ix, col_ix)
-        else:
-            return new_adjacency, row_ix
+        index = np.argwhere(labels == largest_component_label).ravel()
+        output_matrix = input_matrix[index, :]
+        output_matrix = (output_matrix.tocsc()[:, index]).tocsr()
+    if return_index:
+        return output_matrix, index
     else:
-        return new_adjacency
+        return output_matrix
 
 
 def is_bipartite(adjacency: sparse.csr_matrix, return_biadjacency: bool = False) \
         -> Union[bool, Tuple[bool, Optional[sparse.csr_matrix], Optional[np.ndarray], Optional[np.ndarray]]]:
-    """Check whether an undirected graph is bipartite.
-
-    * Graphs
+    """Check whether a graph is bipartite.
 
     Parameters
     ----------
@@ -120,6 +147,15 @@ def is_bipartite(adjacency: sparse.csr_matrix, return_biadjacency: bool = False)
         Index of rows in the original graph (optional).
     cols : np.ndarray
         Index of columns in the original graph (optional).
+
+    Example
+    -------
+    >>> from sknetwork.topology import is_bipartite
+    >>> from sknetwork.data import cyclic_graph
+    >>> is_bipartite(cyclic_graph(4))
+    True
+    >>> is_bipartite(cyclic_graph(3))
+    False
     """
     if not is_symmetric(adjacency):
         raise ValueError('The graph must be undirected.')
@@ -156,23 +192,3 @@ def is_bipartite(adjacency: sparse.csr_matrix, return_biadjacency: bool = False)
         return True
 
 
-def is_acyclic(adjacency: sparse.csr_matrix) -> bool:
-    """Check whether a graph has no cycle.
-
-    Parameters
-    ----------
-    adjacency:
-        Adjacency matrix of the graph.
-
-    Returns
-    -------
-    is_acyclic : bool
-        A boolean with value True if the graph has no cycle and False otherwise
-    """
-    n_nodes = adjacency.shape[0]
-    n_cc = sparse.csgraph.connected_components(adjacency, (not is_symmetric(adjacency)), 'strong', False)
-    if n_cc == n_nodes:
-        # check for self-loops (= cycles)
-        return (adjacency.diagonal() == 0).all()
-    else:
-        return False

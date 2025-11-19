@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on May 2020
-@author: Nathan de Lara <ndelara@enst.fr>
+@author: Nathan de Lara <nathan.delara@polytechnique.org>
 """
 from typing import Union
 
@@ -12,36 +12,35 @@ from scipy.sparse.linalg import LinearOperator
 
 from sknetwork.linalg.polynome import Polynome
 from sknetwork.ranking.base import BaseRanking
+from sknetwork.utils.check import check_format
 from sknetwork.utils.format import get_adjacency
 
 
 class Katz(BaseRanking):
     """Katz centrality, defined by:
 
-    :math:`\\sum_{k=1}^K\\alpha^k(A^k)^T\\mathbf{1}`.
+    :math:`\\sum_{k=1}^K\\alpha^k(A^k)^T\\mathbf{1}`
+
+    where :math:`A` is the adjacency matrix, :math:`\\alpha` is the damping factor and :math:`K` is the path length.
 
     Parameters
     ----------
     damping_factor : float
-        Decay parameter for path contributions.
+        Damping factor for path contributions.
     path_length : int
-        Maximum length of the paths to take into account.
+        Maximum length of the paths.
 
     Attributes
     ----------
     scores_ : np.ndarray
         Score of each node.
-    scores_row_: np.ndarray
-        Scores of rows, for bipartite graphs.
-    scores_col_: np.ndarray
-        Scores of columns, for bipartite graphs.
 
     Examples
     --------
     >>> from sknetwork.data.toy_graphs import house
     >>> adjacency = house()
     >>> katz = Katz()
-    >>> scores = katz.fit_transform(adjacency)
+    >>> scores = katz.fit_predict(adjacency)
     >>> np.round(scores, 2)
     array([6.5 , 8.25, 5.62, 5.62, 8.25])
 
@@ -68,6 +67,7 @@ class Katz(BaseRanking):
         -------
         self: :class:`Katz`
         """
+        input_matrix = check_format(input_matrix)
         adjacency, self.bipartite = get_adjacency(input_matrix)
         n = adjacency.shape[0]
         coefs = self.damping_factor ** np.arange(self.path_length + 1)

@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on April 2020
-@authors:
-Thomas Bonald <bonald@enst.fr>
-Quentin Lutz <qlutz@enst.fr>
+Created in April 2020
+@author: Thomas Bonald <thomas.bonald@telecom-paris.fr>
+@author: Quentin Lutz <qlutz@live.fr>
 """
 from typing import Optional, Iterable, Union, Tuple
 
@@ -12,6 +11,7 @@ import numpy as np
 from scipy import sparse
 
 from sknetwork.clustering.louvain import Louvain
+from sknetwork.utils.format import is_symmetric, check_format
 from sknetwork.embedding.spring import Spring
 from sknetwork.visualization.colors import STANDARD_COLORS, COOLWARM_RGB
 
@@ -166,7 +166,7 @@ def get_node_colors(n: int, labels: Optional[Iterable], scores: Optional[Iterabl
     elif scores is not None:
         colors_score = COOLWARM_RGB.copy()
         n_colors = colors_score.shape[0]
-        colors_score_svg = np.array(['rgb' + str(tuple(colors_score[i])) for i in range(n_colors)])
+        colors_score_svg = np.array(['rgb' + str(tuple([int(c) for c in colors_score[i]])) for i in range(n_colors)])
         if isinstance(scores, dict):
             keys = np.array(list(scores.keys()))
             values = np.array(list(scores.values()))
@@ -290,22 +290,22 @@ def svg_node(pos_node: np.ndarray, size: float, color: str, stroke_width: float 
         .format(x, y, size, color, stroke_color, stroke_width)
 
 
-def svg_pie_chart_node(pos_node: np.ndarray, size: float, membership: np.ndarray, colors: np.ndarray,
+def svg_pie_chart_node(pos_node: np.ndarray, size: float, probs: np.ndarray, colors: np.ndarray,
                        stroke_width: float = 1, stroke_color: str = 'black') -> str:
     """Return svg code for a pie-chart node."""
     x, y = pos_node.astype(float)
     n_colors = len(colors)
     out = ""
-    cumsum = np.zeros(membership.shape[1] + 1)
-    cumsum[1:] = np.cumsum(membership)
+    cumsum = np.zeros(probs.shape[1] + 1)
+    cumsum[1:] = np.cumsum(probs)
     if cumsum[-1] == 0:
         return svg_node(pos_node, size, 'white', stroke_width=3)
-    sum_membership = cumsum[-1]
+    sum_probs = cumsum[-1]
     cumsum = np.multiply(cumsum, (2 * np.pi) / cumsum[-1])
     x_array = size * np.cos(cumsum) + x
     y_array = size * np.sin(cumsum) + y
-    large = np.array(membership > sum_membership / 2).ravel()
-    for index in range(membership.shape[1]):
+    large = np.array(probs > sum_probs / 2).ravel()
+    for index in range(probs.shape[1]):
         out += """<path d="M {} {} A {} {} 0 {} 1 {} {} L {} {}" style="fill:{};stroke:{};stroke-width:{}" />\n"""\
             .format(x_array[index], y_array[index], size, size, int(large[index]),
                     x_array[index + 1], y_array[index + 1], x, y, colors[index % n_colors], stroke_color, stroke_width)
@@ -350,25 +350,28 @@ def svg_text(pos, text, margin_text, font_size=12, position: str = 'right'):
         pos[0] += margin_text
         anchor = 'start'
     x, y = pos.astype(int)
-    text = str(text).replace('&', ' ')
+    text = str(text)
+    for c in ['&', '<', '>']:
+        text = text.replace(c, ' ')
     return """<text text-anchor="{}" x="{}" y="{}" font-size="{}">{}</text>""".format(anchor, x, y, font_size, text)
 
 
-def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[np.ndarray] = None,
-              names: Optional[np.ndarray] = None, labels: Optional[Iterable] = None,
-              name_position: str = 'right',scores: Optional[Iterable] = None,
-              membership: Optional[sparse.csr_matrix] = None,
-              seeds: Union[list, dict] = None, width: Optional[float] = 400, height: Optional[float] = 300,
-              margin: float = 20, margin_text: float = 3, scale: float = 1, node_order: Optional[np.ndarray] = None,
-              node_size: float = 7, node_size_min: float = 1, node_size_max: float = 20,
-              display_node_weight: bool = False, node_weights: Optional[np.ndarray] = None, node_width: float = 1,
-              node_width_max: float = 3, node_color: str = 'gray',
-              display_edges: bool = True, edge_labels: Optional[list] = None,
-              edge_width: float = 1, edge_width_min: float = 0.5,
-              edge_width_max: float = 20, display_edge_weight: bool = True,
-              edge_color: Optional[str] = None, label_colors: Optional[Iterable] = None,
-              font_size: int = 12, directed: bool = False, filename: Optional[str] = None) -> str:
-    """Return SVG image of a graph.
+def visualize_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[np.ndarray] = None,
+                    names: Optional[np.ndarray] = None, labels: Optional[Iterable] = None,
+                    name_position: str = 'right', scores: Optional[Iterable] = None,
+                    probs: Optional[Union[np.ndarray, sparse.csr_matrix]] = None,
+                    seeds: Union[list, dict] = None, width: Optional[float] = 400, height: Optional[float] = 300,
+                    margin: float = 20, margin_text: float = 3, scale: float = 1,
+                    node_order: Optional[np.ndarray] = None, node_size: float = 7, node_size_min: float = 1,
+                    node_size_max: float = 20,
+                    display_node_weight: Optional[bool] = None, node_weights: Optional[np.ndarray] = None,
+                    node_width: float = 1, node_width_max: float = 3, node_color: str = 'gray',
+                    display_edges: bool = True, edge_labels: Optional[list] = None,
+                    edge_width: float = 1, edge_width_min: float = 0.5,
+                    edge_width_max: float = 20, display_edge_weight: bool = False,
+                    edge_color: Optional[str] = None, label_colors: Optional[Iterable] = None,
+                    font_size: int = 12, directed: Optional[bool] = None, filename: Optional[str] = None) -> str:
+    """Return the image of a graph in SVG format.
 
     Parameters
     ----------
@@ -384,8 +387,8 @@ def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[
         Position of the names (left, right, above, below)
     scores :
         Scores of the nodes (measure of importance).
-    membership :
-        Membership of the nodes (label distribution).
+    probs :
+        Probability distribution over labels.
     seeds :
         Nodes to be highlighted (if dict, only keys are considered).
     width :
@@ -415,7 +418,7 @@ def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[
     display_node_weight :
         If ``True``, display node weights through node size.
     node_weights :
-        Node weights (used only if **display_node_weight** is ``True``).
+        Node weights.
     display_edges :
         If ``True``, display edges.
     edge_labels :
@@ -450,8 +453,8 @@ def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[
     >>> graph = karate_club(True)
     >>> adjacency = graph.adjacency
     >>> position = graph.position
-    >>> from sknetwork.visualization import svg_graph
-    >>> image = svg_graph(adjacency, position)
+    >>> from sknetwork.visualization import visualize_graph
+    >>> image = visualize_graph(adjacency, position)
     >>> image[1:4]
     'svg'
     """
@@ -464,6 +467,9 @@ def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[
             adjacency = sparse.csr_matrix((n, n)).astype(int)
     else:
         n = adjacency.shape[0]
+    adjacency.eliminate_zeros()
+    if directed is None:
+        directed = not is_symmetric(adjacency)
 
     # node order
     if node_order is None:
@@ -475,9 +481,11 @@ def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[
         position = spring.fit_transform(adjacency)
 
     # node colors
-    node_colors = get_node_colors(n, labels, scores, membership, node_color, label_colors)
+    node_colors = get_node_colors(n, labels, scores, probs, node_color, label_colors)
 
     # node sizes
+    if display_node_weight is None:
+        display_node_weight = node_weights is not None
     if node_weights is None:
         node_weights = adjacency.T.dot(np.ones(n))
     node_sizes = get_node_sizes(node_weights, node_size, node_size_min, node_size_max, display_node_weight)
@@ -512,7 +520,7 @@ def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[
 
         if directed:
             for edge_color in set(edge_colors):
-                svg += """<defs><marker id="arrow-{}" markerWidth="10" markerHeight="10" refX="9" refY="3" 
+                svg += """<defs><marker id="arrow-{}" markerWidth="10" markerHeight="10" refX="9" refY="3"
                 orient="auto" >\n""".format(edge_color)
                 svg += """<path d="M0,0 L0,6 L9,3 z" fill="{}"/></marker></defs>\n""".format(edge_color)
 
@@ -537,14 +545,15 @@ def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[
 
     # nodes
     for i in node_order:
-        if membership is None:
+        if probs is None:
             svg += svg_node(position[i], node_sizes[i], node_colors[i], node_widths[i])
         else:
-            if membership[i].nnz == 1:
-                index = membership[i].indices[0]
+            probs = check_format(probs)
+            if probs[i].nnz == 1:
+                index = probs[i].indices[0]
                 svg += svg_node(position[i], node_sizes[i], node_colors[index], node_widths[i])
             else:
-                svg += svg_pie_chart_node(position[i], node_sizes[i], membership[i].todense(),
+                svg += svg_pie_chart_node(position[i], node_sizes[i], probs[i].todense(),
                                           node_colors, node_widths[i])
 
     # text
@@ -560,138 +569,28 @@ def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[
     return svg
 
 
-def svg_digraph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[np.ndarray] = None,
-                names: Optional[np.ndarray] = None,
-                labels: Optional[Iterable] = None, name_position: str = 'right', scores: Optional[Iterable] = None,
-                membership: Optional[sparse.csr_matrix] = None,
-                seeds: Union[list, dict] = None, width: Optional[float] = 400, height: Optional[float] = 300,
-                margin: float = 20, margin_text: float = 10, scale: float = 1, node_order: Optional[np.ndarray] = None,
-                node_size: float = 7, node_size_min: float = 1, node_size_max: float = 20,
-                display_node_weight: bool = False, node_weights: Optional[np.ndarray] = None, node_width: float = 1,
-                node_width_max: float = 3, node_color: str = 'gray',
-                display_edges: bool = True, edge_labels: Optional[list] = None,
-                edge_width: float = 1, edge_width_min: float = 0.5,
-                edge_width_max: float = 5, display_edge_weight: bool = True,
-                edge_color: Optional[str] = None, label_colors: Optional[Iterable] = None,
-                font_size: int = 12, filename: Optional[str] = None) -> str:
-    """Return SVG image of a digraph.
-
-    Parameters
-    ----------
-    adjacency :
-        Adjacency matrix of the graph.
-    position :
-        Positions of the nodes.
-    names :
-        Names of the nodes.
-    labels :
-        Labels of the nodes (negative values mean no label).
-    name_position :
-        Position of the names (left, right, above, below)
-    scores :
-        Scores of the nodes (measure of importance).
-    membership :
-        Membership of the nodes (label distribution).
-    seeds :
-        Nodes to be highlighted (if dict, only keys are considered).
-    width :
-        Width of the image.
-    height :
-        Height of the image.
-    margin :
-        Margin of the image.
-    margin_text :
-        Margin between node and text.
-    scale :
-        Multiplicative factor on the dimensions of the image.
-    node_order :
-        Order in which nodes are displayed.
-    node_size :
-        Size of nodes.
-    node_size_min :
-        Minimum size of a node.
-    node_size_max :
-        Maximum size of a node.
-    display_node_weight :
-        If ``True``, display node in-weights through node size.
-    node_weights :
-        Node weights (used only if **display_node_weight** is ``True``).
-    node_width :
-        Width of node circle.
-    node_width_max :
-        Maximum width of node circle.
-    node_color :
-        Default color of nodes (svg color).
-    display_edges :
-        If ``True``, display edges.
-    edge_labels :
-        Labels of the edges, as a list of tuples (source, destination, label)
-    edge_width :
-        Width of edges.
-    edge_width_min :
-        Minimum width of edges.
-    edge_width_max :
-        Maximum width of edges.
-    display_edge_weight :
-        If ``True``, display edge weights through edge widths.
-    edge_color :
-        Default color of edges (svg color).
-    label_colors :
-        Colors of the labels (svg color).
-    font_size :
-        Font size.
-    filename :
-        Filename for saving image (optional).
-
-    Returns
-    -------
-    image : str
-        SVG image.
-
-    Example
-    -------
-    >>> from sknetwork.data import painters
-    >>> graph = painters(True)
-    >>> adjacency = graph.adjacency
-    >>> position = graph.position
-    >>> from sknetwork.visualization import svg_digraph
-    >>> image = svg_graph(adjacency, position)
-    >>> image[1:4]
-    'svg'
-    """
-    return svg_graph(adjacency=adjacency, position=position, names=names, name_position=name_position, labels=labels,
-                     scores=scores, membership=membership, seeds=seeds, width=width, height=height, margin=margin,
-                     margin_text=margin_text, scale=scale, node_order=node_order, node_size=node_size,
-                     node_size_min=node_size_min, node_size_max=node_size_max, display_node_weight=display_node_weight,
-                     node_weights=node_weights, node_width=node_width, node_width_max=node_width_max,
-                     node_color=node_color, display_edges=display_edges, edge_labels=edge_labels,
-                     edge_width=edge_width, edge_width_min=edge_width_min, edge_width_max=edge_width_max,
-                     display_edge_weight=display_edge_weight, edge_color=edge_color, label_colors=label_colors,
-                     font_size=font_size, directed=True, filename=filename)
-
-
-def svg_bigraph(biadjacency: sparse.csr_matrix,
-                names_row: Optional[np.ndarray] = None, names_col: Optional[np.ndarray] = None,
-                labels_row: Optional[Union[dict, np.ndarray]] = None,
-                labels_col: Optional[Union[dict, np.ndarray]] = None,
-                scores_row: Optional[Union[dict, np.ndarray]] = None,
-                scores_col: Optional[Union[dict, np.ndarray]] = None,
-                membership_row: Optional[sparse.csr_matrix] = None,
-                membership_col: Optional[sparse.csr_matrix] = None,
-                seeds_row: Union[list, dict] = None, seeds_col: Union[list, dict] = None,
-                position_row: Optional[np.ndarray] = None, position_col: Optional[np.ndarray] = None,
-                reorder: bool = True, width: Optional[float] = 400,
-                height: Optional[float] = 300, margin: float = 20, margin_text: float = 3, scale: float = 1,
-                node_size: float = 7, node_size_min: float = 1, node_size_max: float = 20,
-                display_node_weight: bool = False,
-                node_weights_row: Optional[np.ndarray] = None, node_weights_col: Optional[np.ndarray] = None,
-                node_width: float = 1, node_width_max: float = 3,
-                color_row: str = 'gray', color_col: str = 'gray', label_colors: Optional[Iterable] = None,
-                display_edges: bool = True, edge_labels: Optional[list] = None, edge_width: float = 1,
-                edge_width_min: float = 0.5, edge_width_max: float = 10, edge_color: str = 'black',
-                display_edge_weight: bool = True,
-                font_size: int = 12, filename: Optional[str] = None) -> str:
-    """Return SVG image of a bigraph.
+def visualize_bigraph(biadjacency: sparse.csr_matrix,
+                      names_row: Optional[np.ndarray] = None, names_col: Optional[np.ndarray] = None,
+                      labels_row: Optional[Union[dict, np.ndarray]] = None,
+                      labels_col: Optional[Union[dict, np.ndarray]] = None,
+                      scores_row: Optional[Union[dict, np.ndarray]] = None,
+                      scores_col: Optional[Union[dict, np.ndarray]] = None,
+                      probs_row: Optional[Union[np.ndarray, sparse.csr_matrix]] = None,
+                      probs_col: Optional[Union[np.ndarray, sparse.csr_matrix]] = None,
+                      seeds_row: Union[list, dict] = None, seeds_col: Union[list, dict] = None,
+                      position_row: Optional[np.ndarray] = None, position_col: Optional[np.ndarray] = None,
+                      reorder: bool = True, width: Optional[float] = 400,
+                      height: Optional[float] = 300, margin: float = 20, margin_text: float = 3, scale: float = 1,
+                      node_size: float = 7, node_size_min: float = 1, node_size_max: float = 20,
+                      display_node_weight: bool = False,
+                      node_weights_row: Optional[np.ndarray] = None, node_weights_col: Optional[np.ndarray] = None,
+                      node_width: float = 1, node_width_max: float = 3,
+                      color_row: str = 'gray', color_col: str = 'gray', label_colors: Optional[Iterable] = None,
+                      display_edges: bool = True, edge_labels: Optional[list] = None, edge_width: float = 1,
+                      edge_width_min: float = 0.5, edge_width_max: float = 10, edge_color: str = 'black',
+                      display_edge_weight: bool = True,
+                      font_size: int = 12, filename: Optional[str] = None) -> str:
+    """Return the image of a bipartite graph in SVG format.
 
     Parameters
     ----------
@@ -709,10 +608,10 @@ def svg_bigraph(biadjacency: sparse.csr_matrix,
         Scores of the rows (measure of importance).
     scores_col :
         Scores of the columns (measure of importance).
-    membership_row :
-        Membership of the rows (label distribution).
-    membership_col :
-        Membership of the columns (label distribution).
+    probs_row :
+        Probability distribution over labels for rows.
+    probs_col :
+        Probability distribution over labels for columns.
     seeds_row :
         Rows to be highlighted (if dict, only keys are considered).
     seeds_col :
@@ -783,8 +682,8 @@ def svg_bigraph(biadjacency: sparse.csr_matrix,
     -------
     >>> from sknetwork.data import movie_actor
     >>> biadjacency = movie_actor()
-    >>> from sknetwork.visualization import svg_bigraph
-    >>> image = svg_bigraph(biadjacency)
+    >>> from sknetwork.visualization import visualize_bigraph
+    >>> image = visualize_bigraph(biadjacency)
     >>> image[1:4]
     'svg'
     """
@@ -819,9 +718,9 @@ def svg_bigraph(biadjacency: sparse.csr_matrix,
         score_min = None
         score_max = None
 
-    colors_row = get_node_colors(n_row, labels_row, scores_row, membership_row, color_row, label_colors,
+    colors_row = get_node_colors(n_row, labels_row, scores_row, probs_row, color_row, label_colors,
                                  score_min, score_max)
-    colors_col = get_node_colors(n_col, labels_col, scores_col, membership_col, color_col, label_colors,
+    colors_col = get_node_colors(n_col, labels_col, scores_col, probs_col, color_col, label_colors,
                                  score_min, score_max)
 
     # node sizes
@@ -885,25 +784,27 @@ def svg_bigraph(biadjacency: sparse.csr_matrix,
 
     # nodes
     for i in range(n_row):
-        if membership_row is None:
+        if probs_row is None:
             svg += svg_node(position_row[i], node_sizes_row[i], colors_row[i], node_widths_row[i])
         else:
-            if membership_row[i].nnz == 1:
-                index = membership_row[i].indices[0]
+            probs_row = check_format(probs_row)
+            if probs_row[i].nnz == 1:
+                index = probs_row[i].indices[0]
                 svg += svg_node(position_row[i], node_sizes_row[i], colors_row[index], node_widths_row[i])
             else:
-                svg += svg_pie_chart_node(position_row[i], node_sizes_row[i], membership_row[i].todense(),
+                svg += svg_pie_chart_node(position_row[i], node_sizes_row[i], probs_row[i].todense(),
                                           colors_row, node_widths_row[i])
 
     for i in range(n_col):
-        if membership_col is None:
+        if probs_col is None:
             svg += svg_node(position_col[i], node_sizes_col[i], colors_col[i], node_widths_col[i])
         else:
-            if membership_col[i].nnz == 1:
-                index = membership_col[i].indices[0]
+            probs_col = check_format(probs_col)
+            if probs_col[i].nnz == 1:
+                index = probs_col[i].indices[0]
                 svg += svg_node(position_col[i], node_sizes_col[i], colors_col[index], node_widths_col[i])
             else:
-                svg += svg_pie_chart_node(position_col[i], node_sizes_col[i], membership_col[i].todense(),
+                svg += svg_pie_chart_node(position_col[i], node_sizes_col[i], probs_col[i].todense(),
                                           colors_col, node_widths_col[i])
     # text
     if names_row is not None:
@@ -919,3 +820,220 @@ def svg_bigraph(biadjacency: sparse.csr_matrix,
             f.write(svg)
 
     return svg
+
+
+def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[np.ndarray] = None,
+              names: Optional[np.ndarray] = None, labels: Optional[Iterable] = None, name_position: str = 'right',
+              scores: Optional[Iterable] = None, probs: Optional[Union[np.ndarray, sparse.csr_matrix]] = None,
+              seeds: Union[list, dict] = None, width: Optional[float] = 400, height: Optional[float] = 300,
+              margin: float = 20, margin_text: float = 3, scale: float = 1, node_order: Optional[np.ndarray] = None,
+              node_size: float = 7, node_size_min: float = 1, node_size_max: float = 20,
+              display_node_weight: Optional[bool] = None, node_weights: Optional[np.ndarray] = None,
+              node_width: float = 1, node_width_max: float = 3, node_color: str = 'gray',
+              display_edges: bool = True, edge_labels: Optional[list] = None,
+              edge_width: float = 1, edge_width_min: float = 0.5,
+              edge_width_max: float = 20, display_edge_weight: bool = True,
+              edge_color: Optional[str] = None, label_colors: Optional[Iterable] = None,
+              font_size: int = 12, directed: Optional[bool] = None, filename: Optional[str] = None) -> str:
+    """Return the image of a graph in SVG format.
+
+    Alias for visualize_graph.
+
+    Parameters
+    ----------
+    adjacency :
+        Adjacency matrix of the graph.
+    position :
+        Positions of the nodes.
+    names :
+        Names of the nodes.
+    labels :
+        Labels of the nodes (negative values mean no label).
+    name_position :
+        Position of the names (left, right, above, below)
+    scores :
+        Scores of the nodes (measure of importance).
+    probs :
+        Probability distribution over labels.
+    seeds :
+        Nodes to be highlighted (if dict, only keys are considered).
+    width :
+        Width of the image.
+    height :
+        Height of the image.
+    margin :
+        Margin of the image.
+    margin_text :
+        Margin between node and text.
+    scale :
+        Multiplicative factor on the dimensions of the image.
+    node_order :
+        Order in which nodes are displayed.
+    node_size :
+        Size of nodes.
+    node_size_min :
+        Minimum size of a node.
+    node_size_max:
+        Maximum size of a node.
+    node_width :
+        Width of node circle.
+    node_width_max :
+        Maximum width of node circle.
+    node_color :
+        Default color of nodes (svg color).
+    display_node_weight :
+        If ``True``, display node weights through node size.
+    node_weights :
+        Node weights.
+    display_edges :
+        If ``True``, display edges.
+    edge_labels :
+        Labels of the edges, as a list of tuples (source, destination, label)
+    edge_width :
+        Width of edges.
+    edge_width_min :
+        Minimum width of edges.
+    edge_width_max :
+        Maximum width of edges.
+    display_edge_weight :
+        If ``True``, display edge weights through edge widths.
+    edge_color :
+        Default color of edges (svg color).
+    label_colors:
+        Colors of the labels (svg colors).
+    font_size :
+        Font size.
+    directed :
+        If ``True``, considers the graph as directed.
+    filename :
+        Filename for saving image (optional).
+
+    Returns
+    -------
+    image : str
+        SVG image.
+    """
+    return visualize_graph(adjacency, position, names, labels, name_position, scores, probs, seeds, width, height,
+                           margin, margin_text, scale, node_order, node_size, node_size_min, node_size_max,
+                           display_node_weight, node_weights, node_width, node_width_max, node_color, display_edges,
+                           edge_labels, edge_width, edge_width_min, edge_width_max, display_edge_weight, edge_color,
+                           label_colors, font_size, directed, filename)
+
+
+def svg_bigraph(biadjacency: sparse.csr_matrix,
+                names_row: Optional[np.ndarray] = None, names_col: Optional[np.ndarray] = None,
+                labels_row: Optional[Union[dict, np.ndarray]] = None,
+                labels_col: Optional[Union[dict, np.ndarray]] = None,
+                scores_row: Optional[Union[dict, np.ndarray]] = None,
+                scores_col: Optional[Union[dict, np.ndarray]] = None,
+                probs_row: Optional[Union[np.ndarray, sparse.csr_matrix]] = None,
+                probs_col: Optional[Union[np.ndarray, sparse.csr_matrix]] = None,
+                seeds_row: Union[list, dict] = None, seeds_col: Union[list, dict] = None,
+                position_row: Optional[np.ndarray] = None, position_col: Optional[np.ndarray] = None,
+                reorder: bool = True, width: Optional[float] = 400,
+                height: Optional[float] = 300, margin: float = 20, margin_text: float = 3, scale: float = 1,
+                node_size: float = 7, node_size_min: float = 1, node_size_max: float = 20,
+                display_node_weight: bool = False,
+                node_weights_row: Optional[np.ndarray] = None, node_weights_col: Optional[np.ndarray] = None,
+                node_width: float = 1, node_width_max: float = 3,
+                color_row: str = 'gray', color_col: str = 'gray', label_colors: Optional[Iterable] = None,
+                display_edges: bool = True, edge_labels: Optional[list] = None, edge_width: float = 1,
+                edge_width_min: float = 0.5, edge_width_max: float = 10, edge_color: str = 'black',
+                display_edge_weight: bool = True,
+                font_size: int = 12, filename: Optional[str] = None) -> str:
+    """Return the image of a bipartite graph in SVG format.
+
+    Alias for visualize_bigraph.
+
+    Parameters
+    ----------
+    biadjacency :
+        Biadjacency matrix of the graph.
+    names_row :
+        Names of the rows.
+    names_col :
+        Names of the columns.
+    labels_row :
+        Labels of the rows (negative values mean no label).
+    labels_col :
+        Labels of the columns (negative values mean no label).
+    scores_row :
+        Scores of the rows (measure of importance).
+    scores_col :
+        Scores of the columns (measure of importance).
+    probs_row :
+        Probability distribution over labels for rows.
+    probs_col :
+        Probability distribution over labels for columns.
+    seeds_row :
+        Rows to be highlighted (if dict, only keys are considered).
+    seeds_col :
+        Columns to be highlighted (if dict, only keys are considered).
+    position_row :
+        Positions of the rows.
+    position_col :
+        Positions of the columns.
+    reorder :
+        Use clustering to order nodes.
+    width :
+        Width of the image.
+    height :
+        Height of the image.
+    margin :
+        Margin of the image.
+    margin_text :
+        Margin between node and text.
+    scale :
+        Multiplicative factor on the dimensions of the image.
+    node_size :
+        Size of nodes.
+    node_size_min :
+        Minimum size of nodes.
+    node_size_max :
+        Maximum size of nodes.
+    display_node_weight :
+        If ``True``, display node weights through node size.
+    node_weights_row :
+        Weights of rows (used only if **display_node_weight** is ``True``).
+    node_weights_col :
+        Weights of columns (used only if **display_node_weight** is ``True``).
+    node_width :
+        Width of node circle.
+    node_width_max :
+        Maximum width of node circle.
+    color_row :
+        Default color of rows (svg color).
+    color_col :
+        Default color of cols (svg color).
+    label_colors :
+        Colors of the labels (svg color).
+    display_edges :
+        If ``True``, display edges.
+    edge_labels :
+        Labels of the edges, as a list of tuples (source, destination, label)
+    edge_width :
+        Width of edges.
+    edge_width_min :
+        Minimum width of edges.
+    edge_width_max :
+        Maximum width of edges.
+    display_edge_weight :
+        If ``True``, display edge weights through edge widths.
+    edge_color :
+        Default color of edges (svg color).
+    font_size :
+        Font size.
+    filename :
+        Filename for saving image (optional).
+
+    Returns
+    -------
+    image : str
+        SVG image.
+    """
+    return visualize_bigraph(biadjacency, names_row, names_col, labels_row, labels_col, scores_row, scores_col,
+                             probs_row, probs_col, seeds_row, seeds_col, position_row, position_col, reorder,
+                             width, height, margin, margin_text, scale, node_size, node_size_min, node_size_max,
+                             display_node_weight, node_weights_row, node_weights_col, node_width, node_width_max,
+                             color_row, color_col, label_colors, display_edges, edge_labels, edge_width, edge_width_min,
+                             edge_width_max, edge_color, display_edge_weight, font_size, filename)

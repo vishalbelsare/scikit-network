@@ -2,7 +2,7 @@
 # coding: utf-8
 """
 Created on Apr 2020
-@author: Nathan de Lara <ndelara@enst.fr>
+@author: Nathan de Lara <nathan.delara@polytechnique.org>
 """
 from typing import Optional, Union
 
@@ -18,10 +18,7 @@ from sknetwork.utils.format import directed2undirected
 
 
 class Spring(BaseEmbedding):
-    """Spring layout for displaying small graphs.
-
-    * Graphs
-    * Digraphs
+    r"""Spring layout for displaying small graphs.
 
     Parameters
     ----------
@@ -42,8 +39,8 @@ class Spring(BaseEmbedding):
 
     Attributes
     ----------
-    embedding_ : np.ndarray
-        Layout.
+    embedding_ : np.ndarray, shape = (n_nodes, n_components)
+        Embedding of the nodes.
 
     Example
     -------

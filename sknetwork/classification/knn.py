@@ -1,161 +1,131 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Nov, 2019
-@author: Nathan de Lara <ndelara@enst.fr>
+Created in November 2019
+@author: Nathan de Lara <nathan.delara@polytechnique.org>
 @author: Thomas Bonald <tbonald@enst.fr>
 """
 from typing import Optional, Union
 
 import numpy as np
 from scipy import sparse
-from scipy.spatial import cKDTree
 
 from sknetwork.classification.base import BaseClassifier
 from sknetwork.embedding.base import BaseEmbedding
-from sknetwork.embedding.svd import GSVD
-from sknetwork.linalg.normalization import normalize
-from sknetwork.utils.check import check_n_neighbors, check_n_jobs
-from sknetwork.utils.format import get_adjacency_seeds
+from sknetwork.linalg.normalizer import get_norms, normalize
+from sknetwork.utils.check import check_n_neighbors
+from sknetwork.utils.format import get_adjacency_values
 
 
-class KNN(BaseClassifier):
-    """Node classification by K-nearest neighbors in the embedding space.
-
-    For bigraphs, classify rows only (see ``BiKNN`` for joint classification of rows and columns).
+class NNClassifier(BaseClassifier):
+    r"""Node classification by K-nearest neighbors in the embedding space.
 
     Parameters
     ----------
-    embedding_method :
-        Which algorithm to use to project the nodes in vector space. Default is ``GSVD``.
-    n_neighbors :
-        Number of nearest neighbors to consider.
-    factor_distance :
-        Power weighting factor :math:`\\alpha` applied to the distance to each neighbor.
-        Neighbor at distance :math:``d`` has weight :math:`1 / d^\\alpha`. Default is 2.
-    leaf_size :
-        Leaf size passed to KDTree.
-    p :
-        Which Minkowski p-norm to use. Default is 2 (Euclidean distance).
-    tol_nn :
-        Tolerance in nearest neighbors search; the k-th returned value is guaranteed to be no further
-        than ``1 + tol_nn`` times the distance to the actual k-th nearest neighbor.
-    n_jobs :
-        Number of jobs to schedule for parallel processing. If -1 is given all processors are used.
+    n_neighbors : int
+        Number of nearest neighbors .
+    embedding_method : :class:`BaseEmbedding`
+        Embedding method used to represent nodes in vector space.
+        If ``None`` (default), use identity.
+    normalize : bool
+        If ``True``, apply normalization so that all vectors have norm 1 in the embedding space.
 
     Attributes
     ----------
-    labels_ : np.ndarray, shape (n_labels,)
-        Label of each node.
-    membership_ : sparse.csr_matrix, shape (n_row, n_labels)
-        Membership matrix.
-    labels_row_ : np.ndarray
-        Labels of rows, for bipartite graphs.
-    labels_col_ : np.ndarray
-        Labels of columns, for bipartite graphs.
-    membership_row_ : sparse.csr_matrix, shape (n_row, n_labels)
-        Membership matrix of rows, for bipartite graphs.
-    membership_col_ : sparse.csr_matrix, shape (n_col, n_labels)
-        Membership matrix of columns, for bipartite graphs.
+    labels_ : np.ndarray, shape (n_nodes,)
+        Labels of nodes.
+    probs_ : sparse.csr_matrix, shape (n_nodes, n_labels)
+        Probability distribution over labels.
+
     Example
     -------
-    >>> from sknetwork.classification import KNN
-    >>> from sknetwork.embedding import GSVD
+    >>> from sknetwork.classification import NNClassifier
     >>> from sknetwork.data import karate_club
-    >>> knn = KNN(GSVD(3), n_neighbors=1)
+    >>> classifier = NNClassifier(n_neighbors=1)
     >>> graph = karate_club(metadata=True)
     >>> adjacency = graph.adjacency
     >>> labels_true = graph.labels
-    >>> seeds = {0: labels_true[0], 33: labels_true[33]}
-    >>> labels_pred = knn.fit_transform(adjacency, seeds)
-    >>> np.round(np.mean(labels_pred == labels_true), 2)
-    0.97
+    >>> labels = {0: labels_true[0], 33: labels_true[33]}
+    >>> labels_pred = classifier.fit_predict(adjacency, labels)
+    >>> float(round(np.mean(labels_pred == labels_true), 2))
+    0.82
     """
-    def __init__(self, embedding_method: BaseEmbedding = GSVD(10), n_neighbors: int = 5,
-                 factor_distance: float = 2, leaf_size: int = 16, p: float = 2, tol_nn: float = 0.01,
-                 n_jobs: Optional[int] = None):
-        super(KNN, self).__init__()
-
-        self.embedding_method = embedding_method
+    def __init__(self, n_neighbors: int = 3, embedding_method: Optional[BaseEmbedding] = None, normalize: bool = True):
+        super(NNClassifier, self).__init__()
         self.n_neighbors = n_neighbors
-        self.factor_distance = factor_distance
-        self.leaf_size = leaf_size
-        self.p = p
-        self.tol_nn = tol_nn
-        self.n_jobs = check_n_jobs(n_jobs)
-        if self.n_jobs is None:
-            self.n_jobs = -1
-        self.bipartite = None
+        self.embedding_method = embedding_method
+        self.normalize = normalize
 
-    def _instantiate_vars(self, seeds: Union[np.ndarray, dict]):
-        labels = seeds.astype(int)
-        index_seed = np.argwhere(labels >= 0).ravel()
-        index_remain = np.argwhere(labels < 0).ravel()
-        labels_seed = labels[index_seed]
-        return index_seed, index_remain, labels_seed
+    @staticmethod
+    def _instantiate_vars(labels: np.ndarray):
+        index_train = np.flatnonzero(labels >= 0)
+        index_test = np.flatnonzero(labels < 0)
+        return index_train, index_test
 
-    def _fit_core(self, n, labels_seed, embedding, index_seed, index_remain):
-        n_seeds = len(labels_seed)
-        embedding_seed = embedding[index_seed]
-        embedding_remain = embedding[index_remain]
-        n_neighbors = check_n_neighbors(self.n_neighbors, n_seeds)
-        tree = cKDTree(embedding_seed, self.leaf_size)
-        distances, neighbors = tree.query(embedding_remain, n_neighbors, self.tol_nn, self.p, n_jobs=self.n_jobs)
+    def _fit_core(self, embedding, labels, index_train, index_test):
+        n_neighbors = check_n_neighbors(self.n_neighbors, len(index_train))
 
-        if n_neighbors == 1:
-            distances = distances[:, np.newaxis]
-            neighbors = neighbors[:, np.newaxis]
+        norms_train = get_norms(embedding[index_train], p=2)
+        neighbors = []
+        for i in index_test:
+            vector = embedding[i]
+            if sparse.issparse(vector):
+                vector = vector.toarray().ravel()
+            distances = norms_train**2 - 2 * embedding[index_train].dot(vector) + np.sum(vector**2)
+            neighbors += list(index_train[np.argpartition(distances, n_neighbors)[:n_neighbors]])
+        labels_neighbor = labels[neighbors]
 
-        labels_neighbor = labels_seed[neighbors]
-        index = (np.min(distances, axis=1) == 0)
-        weights_neighbor = np.zeros_like(distances).astype(float)
-        # take all seeds at distance zero, if any
-        weights_neighbor[index] = (distances[index] == 0).astype(float)
-        # assign weights with respect to distances for other
-        weights_neighbor[~index] = 1 / np.power(distances[~index], self.factor_distance)
+        # membership matrix
+        row = list(np.repeat(index_test, n_neighbors))
+        col = list(labels_neighbor)
+        data = list(np.ones_like(labels_neighbor))
 
-        # form the corresponding matrix
-        row = list(np.repeat(index_remain, n_neighbors))
-        col = list(labels_neighbor.ravel())
-        data = list(weights_neighbor.ravel())
+        row += list(index_train)
+        col += list(labels[index_train])
+        data += list(np.ones_like(index_train))
 
-        row += list(index_seed)
-        col += list(labels_seed)
-        data += list(np.ones_like(index_seed))
+        probs = normalize(sparse.csr_matrix((data, (row, col)), shape=(len(labels), np.max(labels) + 1)))
+        labels = np.argmax(probs.toarray(), axis=1)
 
-        membership = normalize(sparse.csr_matrix((data, (row, col)), shape=(n, np.max(labels_seed) + 1)))
-        membership_dense = membership.toarray()
-        labels = np.argmax(membership_dense, axis=1)
+        return probs, labels
 
-        return membership, labels
-
-    def fit(self, input_matrix: Union[sparse.csr_matrix, np.ndarray], seeds: Union[np.ndarray, dict] = None,
-            seeds_row: Union[np.ndarray, dict] = None, seeds_col: Union[np.ndarray, dict] = None) -> 'KNN':
+    def fit(self, input_matrix: Union[sparse.csr_matrix, np.ndarray], labels: Union[np.ndarray, list, dict] = None,
+            labels_row: Union[np.ndarray, list, dict] = None,
+            labels_col: Union[np.ndarray, list, dict] = None) -> 'NNClassifier':
         """Node classification by k-nearest neighbors in the embedding space.
 
         Parameters
         ----------
-        input_matrix :
+        input_matrix : sparse.csr_matrix, np.ndarray
             Adjacency matrix or biadjacency matrix of the graph.
-        seeds :
-            Seed nodes. Can be a dict {node: label} or an array where "-1" means no label.
-        seeds_row, seeds_col :
-            Seeds of rows and columns (for bipartite graphs).
+        labels : np.ndarray, dict
+            Known labels. Negative values ignored.
+        labels_row : np.ndarray, dict
+            Known labels of rows, for bipartite graphs.
+        labels_col : np.ndarray, dict
+            Known labels of columns, for bipartite graphs.
 
         Returns
         -------
         self: :class:`KNN`
         """
-        adjacency, seeds, self.bipartite = get_adjacency_seeds(input_matrix, seeds=seeds, seeds_row=seeds_row,
-                                                               seeds_col=seeds_col)
-        index_seed, index_remain, labels_seed = self._instantiate_vars(seeds)
-        embedding = self.embedding_method.fit_transform(adjacency)
-        membership, labels = self._fit_core(adjacency.shape[0], labels_seed, embedding, index_seed, index_remain)
+        adjacency, labels, self.bipartite = get_adjacency_values(input_matrix, values=labels, values_row=labels_row,
+                                                                 values_col=labels_col)
+        labels = labels.astype(int)
+        index_seed, index_remain = self._instantiate_vars(labels)
 
-        self.membership_ = membership
+        if self.embedding_method is None:
+            embedding = adjacency
+        else:
+            embedding = self.embedding_method.fit_transform(adjacency)
+
+        if self.normalize:
+            embedding = normalize(embedding, p=2)
+
+        probs, labels = self._fit_core(embedding, labels, index_seed, index_remain)
+
         self.labels_ = labels
-
-        if self.bipartite:
-            self._split_vars(input_matrix.shape)
+        self.probs_ = probs
+        self._split_vars(input_matrix.shape)
 
         return self

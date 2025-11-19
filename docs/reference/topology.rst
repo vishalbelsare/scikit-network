@@ -3,36 +3,54 @@
 Topology
 ********
 
-Algorithms for the analysis of graph topology.
+Functions related to graph topology.
+
+Connectivity
+------------
+
+.. autofunction:: sknetwork.topology.get_connected_components
+
+.. autofunction:: sknetwork.topology.is_connected
+
+.. autofunction:: sknetwork.topology.get_largest_connected_component
 
 Structure
 ---------
 
-.. autofunction:: sknetwork.topology.get_connected_components
-
-.. autofunction:: sknetwork.topology.get_largest_connected_component
-
-.. autoclass:: sknetwork.topology.CoreDecomposition
-
 .. autofunction:: sknetwork.topology.is_bipartite
+
+Cycles
+------
 
 .. autofunction:: sknetwork.topology.is_acyclic
 
-.. autoclass:: sknetwork.topology.DAG
+.. autofunction:: sknetwork.topology.get_cycles
 
-Counting
---------
+.. autofunction:: sknetwork.topology.break_cycles
 
-.. autoclass:: sknetwork.topology.Triangles
+Core decomposition
+------------------
 
-.. autoclass:: sknetwork.topology.Cliques
+.. autoclass:: sknetwork.topology.get_core_decomposition
 
-Coloring
---------
 
-.. autoclass:: sknetwork.topology.WeisfeilerLehman
+Triangles
+---------
 
-Similarity
-----------
+.. autoclass:: sknetwork.topology.count_triangles
+
+.. autoclass:: sknetwork.topology.get_clustering_coefficient
+
+
+Cliques
+-------
+
+.. autoclass:: sknetwork.topology.count_cliques
+
+
+Isomorphism
+-----------
+
+.. autoclass:: sknetwork.topology.color_weisfeiler_lehman
 
 .. autofunction:: sknetwork.topology.are_isomorphic

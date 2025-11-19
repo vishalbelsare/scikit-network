@@ -1,10 +1,8 @@
 # distutils: language = c++
 # cython: language_level=3
-# cython: linetrace=True
-# distutils: define_macros=CYTHON_TRACE_NOGIL=1
 """
-Created on April, 2020
-@author: Nathan de Lara <ndelara@enst.fr>
+Created in April 2020
+@author: Nathan de Lara <nathan.delara@polytechnique.org>
 """
 from libcpp.set cimport set
 from libcpp.vector cimport vector

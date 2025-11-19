@@ -37,10 +37,6 @@ Louvain
 
 .. autoclass:: sknetwork.embedding.LouvainEmbedding
 
-Hierarchical Louvain
---------------------
-
-.. autoclass:: sknetwork.embedding.LouvainNE
 
 Force Atlas
 -----------
@@ -51,8 +47,3 @@ Spring
 ------
 
 .. autoclass:: sknetwork.embedding.Spring
-
-Metrics
--------
-.. autofunction:: sknetwork.embedding.cosine_modularity
-

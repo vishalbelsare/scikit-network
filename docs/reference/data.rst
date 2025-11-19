@@ -3,7 +3,37 @@
 Data
 ####
 
-Tools for importing and exporting data.
+Tools for loading and saving graphs.
+
+Edge list
+*********
+
+.. autofunction:: sknetwork.data.from_edge_list
+
+Adjacency list
+**************
+
+.. autofunction:: sknetwork.data.from_adjacency_list
+
+Files
+*****
+
+Check the :ref:`tutorial<DataTag>` for importing graphs from dataframes.
+
+.. autofunction:: sknetwork.data.from_csv
+
+.. autofunction:: sknetwork.data.from_graphml
+
+Datasets
+********
+
+.. autofunction:: sknetwork.data.load_netset
+
+.. autofunction:: sknetwork.data.load_konect
+
+You can also find some datasets on NetRep_.
+
+.. _NetRep: http://networkrepository.com/
 
 Toy graphs
 **********
@@ -21,6 +51,8 @@ Toy graphs
 .. autofunction:: sknetwork.data.star_wars
 
 .. autofunction:: sknetwork.data.movie_actor
+
+.. autofunction:: sknetwork.data.art_philo_science
 
 Models
 ******
@@ -43,29 +75,9 @@ Models
 
 .. autofunction:: sknetwork.data.watts_strogatz
 
-Load
-****
-
-You can find some datasets on NetRep_.
-
-.. autofunction:: sknetwork.data.load_edge_list
-
-.. autofunction:: sknetwork.data.load_adjacency_list
-
-.. autofunction:: sknetwork.data.load_graphml
-
-.. autofunction:: sknetwork.data.load_netset
-
-.. autofunction:: sknetwork.data.load_konect
-
-.. autofunction:: sknetwork.data.convert_edge_list
-
-.. _NetRep: http://networkrepository.com/
-
 Save
 ****
 
 .. autofunction:: sknetwork.data.save
 
 .. autofunction:: sknetwork.data.load
-

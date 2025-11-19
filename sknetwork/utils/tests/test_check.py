@@ -4,7 +4,7 @@
 import unittest
 
 from sknetwork.data import cyclic_digraph
-from sknetwork.data.test_graphs import test_graph_disconnect
+from sknetwork.data.test_graphs import test_disconnected_graph
 from sknetwork.utils.check import *
 from sknetwork.utils.format import check_csr_or_slr
 
@@ -16,10 +16,6 @@ class TestChecks(unittest.TestCase):
         self.adjacency = cyclic_digraph(3)
         self.dense_mat = np.identity(3)
 
-    def test_check_format(self):
-        with self.assertRaises(TypeError):
-            check_format(self.adjacency.tocsc())
-
     def test_check_csr_slr(self):
         with self.assertRaises(TypeError):
             check_csr_or_slr(np.ones(3))
@@ -30,7 +26,7 @@ class TestChecks(unittest.TestCase):
 
     def test_check_connected(self):
         with self.assertRaises(ValueError):
-            check_connected(test_graph_disconnect())
+            check_connected(test_disconnected_graph())
 
     def test_check_symmetry(self):
         with self.assertRaises(ValueError):
@@ -157,6 +153,38 @@ class TestChecks(unittest.TestCase):
         adjacency = cyclic_digraph(3)
         with self.assertRaises(ValueError):
             check_scaling(-1, adjacency, regularize=True)
-        adjacency = test_graph_disconnect()
+        adjacency = test_disconnected_graph()
         with self.assertRaises(ValueError):
             check_scaling(-1, adjacency, regularize=False)
+
+    def test_boolean_entries(self):
+        with self.assertRaises(TypeError):
+            has_boolean_entries([True, 0, 2])
+        self.assertFalse(has_boolean_entries(np.array([0, 1, True])))
+
+    def test_boolean(self):
+        check_boolean(np.array([True, False, True]))
+        with self.assertRaises(ValueError):
+            check_boolean(np.array([True, 0, 2]))
+
+    def test_check_vector_format(self):
+        check_vector_format(np.arange(4), np.ones(4))
+        with self.assertRaises(ValueError):
+            check_vector_format(np.arange(4), np.ones((4, 3)))
+        with self.assertRaises(ValueError):
+            check_vector_format(np.arange(4), np.ones(5))
+
+    def test_has_self_loops(self):
+        self.assertTrue(has_self_loops(sparse.csr_matrix(np.array([[1, 0], [1, 1]]))))
+        self.assertFalse(has_self_loops(sparse.csr_matrix(np.array([[0, 0], [1, 1]]))))
+
+    def test_add_self_loops(self):
+        # Square adjacency
+        adjacency = sparse.csr_matrix(np.array([[0, 0], [1, 1]]))
+        self.assertFalse(has_self_loops(adjacency))
+        adjacency = add_self_loops(adjacency)
+        self.assertTrue(has_self_loops(adjacency))
+        # Non square adjacency
+        adjacency = sparse.csr_matrix(np.array([[0, 0, 1], [1, 1, 1]]))
+        n_row, n_col = adjacency.shape
+        self.assertTrue(has_self_loops(add_self_loops(adjacency)[:, :n_row]))

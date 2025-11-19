@@ -11,11 +11,11 @@ from scipy import sparse
 
 from sknetwork.classification.propagation import Propagation
 from sknetwork.clustering.base import BaseClustering
-from sknetwork.utils.format import get_adjacency
+from sknetwork.utils.format import check_format, get_adjacency
 
 
 class PropagationClustering(BaseClustering, Propagation):
-    """Clustering by label propagation.
+    r"""Clustering by label propagation.
 
     Parameters
     ----------
@@ -29,27 +29,19 @@ class PropagationClustering(BaseClustering, Propagation):
     weighted : bool
         If ``True``, the vote of each neighbor is proportional to the edge weight.
         Otherwise, all votes have weight 1.
-    sort_clusters :
-            If ``True``, sort labels in decreasing order of cluster size.
-    return_membership :
-            If ``True``, return the membership matrix of nodes to each cluster (soft clustering).
-    return_aggregate :
-            If ``True``, return the aggregate adjacency matrix or biadjacency matrix between clusters.
+    sort_clusters : bool
+        If ``True``, sort labels in decreasing order of cluster size.
+    return_probs : bool
+        If ``True``, return the probability distribution over clusters (soft clustering).
+    return_aggregate : bool
+        If ``True``, return the aggregate adjacency matrix or biadjacency matrix between clusters.
 
     Attributes
     ----------
-    labels_ : np.ndarray
-        Labels of the nodes.
-    labels_row_ : np.ndarray
-        Labels of the rows (for bipartite graphs).
-    labels_col_ : np.ndarray
-        Labels of the columns (for bipartite graphs).
-    membership_ : sparse.csr_matrix
-        Membership matrix of the nodes, shape (n_nodes, n_clusters).
-    membership_row_ : sparse.csr_matrix
-        Membership matrix of the rows (for bipartite graphs).
-    membership_col_ : sparse.csr_matrix
-        Membership matrix of the columns (for bipartite graphs).
+    labels_ : np.ndarray, shape (n_nodes,)
+        Label of each node.
+    probs_ : sparse.csr_matrix, shape (n_nodes, n_labels)
+        Probability distribution over labels.
     aggregate_ : sparse.csr_matrix
         Aggregate adjacency matrix or biadjacency matrix between clusters.
 
@@ -60,7 +52,7 @@ class PropagationClustering(BaseClustering, Propagation):
     >>> propagation = PropagationClustering()
     >>> graph = karate_club(metadata=True)
     >>> adjacency = graph.adjacency
-    >>> labels = propagation.fit_transform(adjacency)
+    >>> labels = propagation.fit_predict(adjacency)
     >>> len(set(labels))
     2
 
@@ -72,9 +64,9 @@ class PropagationClustering(BaseClustering, Propagation):
     Physical review E, 76(3), 036106.
     """
     def __init__(self, n_iter: int = 5, node_order: str = 'decreasing', weighted: bool = True,
-                 sort_clusters: bool = True, return_membership: bool = True, return_aggregate: bool = True):
+                 sort_clusters: bool = True, return_probs: bool = True, return_aggregate: bool = True):
         Propagation.__init__(self, n_iter, node_order, weighted)
-        BaseClustering.__init__(self, sort_clusters, return_membership, return_aggregate)
+        BaseClustering.__init__(self, sort_clusters, return_probs, return_aggregate)
         self.bipartite = None
 
     def fit(self, input_matrix: Union[sparse.csr_matrix, np.ndarray]) -> 'PropagationClustering':
@@ -82,7 +74,7 @@ class PropagationClustering(BaseClustering, Propagation):
 
         Parameters
         ----------
-        input_matrix :
+        input_matrix : sparse.csr_matrix, np.ndarray
             Adjacency matrix or biadjacency matrix of the graph.
 
         Returns
@@ -92,6 +84,7 @@ class PropagationClustering(BaseClustering, Propagation):
         self._init_vars()
 
         # input
+        input_matrix = check_format(input_matrix)
         adjacency, bipartite = get_adjacency(input_matrix)
 
         # propagation
